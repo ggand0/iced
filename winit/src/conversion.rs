@@ -123,6 +123,8 @@ pub fn window_event(
         // WindowEvent::DragOver(path, position) => {
         WindowEvent::DragOver {position, ..} => {
             // Some(Event::Window(window::Event::FileHovered(position.clone())))
+
+            let position = position.to_logical::<f64>(scale_factor);
             let position_u64 = PhysicalPosition::<u64> {
                 x: position.x as u64,
                 y: position.y as u64,
@@ -133,6 +135,7 @@ pub fn window_event(
         // WindowEvent::DragDrop(path, position) => {
         WindowEvent::DragDrop {paths, position, ..} => {
             // Some(Event::Window(window::Event::FileDropped(paths.clone(), position.clone())))
+            let position = position.to_logical::<f64>(scale_factor);
             let position_u64 = PhysicalPosition::<u64> {
                 x: position.x as u64,
                 y: position.y as u64,
