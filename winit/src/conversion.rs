@@ -118,15 +118,17 @@ pub fn window_event(
         } else {
             window::Event::Unfocused
         })),
-        WindowEvent::HoveredFile(path) => {
+        // WindowEvent::HoveredFile(path) => {
+        WindowEvent::DragOver(path) => {
             Some(Event::Window(window::Event::FileHovered(path.clone())))
         }
-        WindowEvent::DroppedFile(path) => {
+        //WindowEvent::DroppedFile(path) => {
+        WindowEvent::DragDrop(path) => {
             Some(Event::Window(window::Event::FileDropped(path.clone())))
         }
-        WindowEvent::HoveredFileCancelled => {
+        /*WindowEvent::HoveredFileCancelled => {
             Some(Event::Window(window::Event::FilesHoveredLeft))
-        }
+        }*/
         WindowEvent::Touch(touch) => {
             Some(Event::Touch(touch_event(*touch, scale_factor)))
         }
