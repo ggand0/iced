@@ -119,12 +119,12 @@ pub fn window_event(
             window::Event::Unfocused
         })),
         // WindowEvent::HoveredFile(path) => {
-        WindowEvent::DragOver(path) => {
-            Some(Event::Window(window::Event::FileHovered(path.clone())))
+        WindowEvent::DragOver(path, position) => {
+            Some(Event::Window(window::Event::FileHovered(path.clone(), position.clone())))
         }
         //WindowEvent::DroppedFile(path) => {
-        WindowEvent::DragDrop(path) => {
-            Some(Event::Window(window::Event::FileDropped(path.clone())))
+        WindowEvent::DragDrop(path, position) => {
+            Some(Event::Window(window::Event::FileDropped(path.clone(), position.clone())))
         }
         /*WindowEvent::HoveredFileCancelled => {
             Some(Event::Window(window::Event::FilesHoveredLeft))
