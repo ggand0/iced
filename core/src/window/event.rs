@@ -2,7 +2,9 @@ use crate::time::Instant;
 
 use std::path::PathBuf;
 
-pub trait Pixel: Copy + Into<f64> {
+use winit::dpi::PhysicalPosition;
+
+/*pub trait Pixel: Copy + Into<f64> {
     fn from_f64(f: f64) -> Self;
     fn cast<P: Pixel>(self) -> P {
         P::from_f64(self.into())
@@ -66,6 +68,7 @@ pub fn validate_scale_factor(scale_factor: f64) -> bool {
 /// fractional part, which can cause noticable issues. To help with that, an `Into<(i32, i32)>`
 /// implementation is provided which does the rounding for you.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Hash)]
+// #[derive(Debug, Copy, Clone, PartialEq, Default, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct LogicalPosition<P> {
     pub x: P,
@@ -144,6 +147,7 @@ impl<P: Pixel> From<LogicalPosition<P>> for mint::Point2<P> {
 }
 
 /// A position represented in physical pixels.
+// #[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Hash)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PhysicalPosition<P> {
@@ -480,6 +484,16 @@ impl<P: Pixel> From<LogicalPosition<P>> for Position {
     }
 }
 
+impl PartialEq for PhysicalPosition<f64> {
+    fn eq(&self, other: &Self) -> bool {
+        self.x.eq(&other.x) && self.y.eq(&other.y)
+    }
+}
+
+impl Eq for PhysicalPosition<f64> {}*/
+
+
+
 /// A window-related event.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Event {
@@ -520,13 +534,13 @@ pub enum Event {
     ///
     /// When the user hovers multiple files at once, this event will be emitted
     /// for each file separately.
-    FileHovered(PathBuf, PhysicalPosition),
+    FileHovered(PhysicalPosition<u64>), // should be f64 but a hack
 
     /// A file has beend dropped into the window.
     ///
     /// When the user drops multiple files at once, this event will be emitted
     /// for each file separately.
-    FileDropped(PathBuf, PhysicalPosition),
+    FileDropped(Vec<PathBuf>, PhysicalPosition<u64>),
 
     /// A file was hovered, but has exited the window.
     ///

@@ -8,6 +8,7 @@ use crate::core::touch;
 use crate::core::window;
 use crate::core::{Event, Point};
 use crate::Position;
+use winit::dpi::PhysicalPosition;
 
 /// Converts a winit window event into an iced event.
 pub fn window_event(
@@ -119,13 +120,26 @@ pub fn window_event(
             window::Event::Unfocused
         })),
         // WindowEvent::HoveredFile(path) => {
-        WindowEvent::DragOver(path, position) => {
-            Some(Event::Window(window::Event::FileHovered(path.clone(), position.clone())))
+        // WindowEvent::DragOver(path, position) => {
+        WindowEvent::DragOver {position, ..} => {
+            // Some(Event::Window(window::Event::FileHovered(position.clone())))
+            let position_u64 = PhysicalPosition::<u64> {
+                x: position.x as u64,
+                y: position.y as u64,
+            };
+            Some(Event::Window(window::Event::FileHovered(position_u64)))
         }
         //WindowEvent::DroppedFile(path) => {
-        WindowEvent::DragDrop(path, position) => {
-            Some(Event::Window(window::Event::FileDropped(path.clone(), position.clone())))
+        // WindowEvent::DragDrop(path, position) => {
+        WindowEvent::DragDrop {paths, position, ..} => {
+            // Some(Event::Window(window::Event::FileDropped(paths.clone(), position.clone())))
+            let position_u64 = PhysicalPosition::<u64> {
+                x: position.x as u64,
+                y: position.y as u64,
+            };
+            Some(Event::Window(window::Event::FileDropped(paths.clone(), position_u64)))
         }
+
         /*WindowEvent::HoveredFileCancelled => {
             Some(Event::Window(window::Event::FilesHoveredLeft))
         }*/

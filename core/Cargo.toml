@@ -13,6 +13,11 @@ thiserror = "1"
 log = "0.4.17"
 twox-hash = { version = "1.5", default-features = false }
 
+[dependencies.winit]
+git = "https://github.com/amrbashir/winit.git"
+rev = "96593ab07da56564958520c0b003d328706bde8e"
+default-features = false
+
 [dependencies.palette]
 version = "0.7"
 optional = true
