@@ -29,7 +29,8 @@ thiserror = "1.0"
 raw-window-handle = "0.5"
 
 [dependencies.winit]
-version = "0.28"
+git = "https://github.com/amrbashir/winit.git"
+rev = "96593ab07da56564958520c0b003d328706bde8e"
 default-features = false
 
 [dependencies.iced_runtime]
