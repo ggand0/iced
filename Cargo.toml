@@ -184,7 +184,9 @@ web-time = "1.1"
 wgpu = "0.19"
 winapi = "0.3"
 window_clipboard = "0.4.1"
-winit = "0.30"
+#winit = "0.30"
+# v0.30.0 mac+windows custom dependencies
+winit = { git = "https://github.com/ggand0/winit.git", rev = "ef40f477b66b64f68eda0562a92bd42bcd35b14a" }
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "forbid", priority = -1 }
