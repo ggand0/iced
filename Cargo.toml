@@ -186,7 +186,9 @@ winapi = "0.3"
 window_clipboard = "0.4.1"
 #winit = "0.30"
 # v0.30.0 mac+windows custom dependencies
-winit = { git = "https://github.com/ggand0/winit.git", rev = "ef40f477b66b64f68eda0562a92bd42bcd35b14a" }
+#winit = { git = "https://github.com/ggand0/winit.git", rev = "ef40f477b66b64f68eda0562a92bd42bcd35b14a" }
+winit = { git = "https://github.com/ggand0/winit.git", rev = "e6ca302116d7f5c6c212cf659db63fabed9afbe5" }
+#winit = { git = "https://github.com/rust-windowing/winit.git", branch = "master" }
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "forbid", priority = -1 }
