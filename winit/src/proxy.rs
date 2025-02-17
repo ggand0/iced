@@ -118,6 +118,7 @@ impl<T: 'static> Sink<Action<T>> for Proxy<T> {
         mut self: Pin<&mut Self>,
         action: Action<T>,
     ) -> Result<(), Self::Error> {
+        let _ = self.notifier.start_send(1); // Fix: Ensure it sends 
         self.sender.start_send(action)
     }
 
@@ -125,6 +126,7 @@ impl<T: 'static> Sink<Action<T>> for Proxy<T> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
+        let _ = self.notifier.start_send(100); // [02/18/25: gota] Fix: Force sending 100
         match self.sender.poll_ready(cx) {
             Poll::Ready(Err(ref e)) if e.is_disconnected() => {
                 // If the receiver disconnected, we consider the sink to be flushed.
