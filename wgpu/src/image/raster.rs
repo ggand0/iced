@@ -5,6 +5,8 @@ use crate::graphics::image::image_rs;
 use crate::image::atlas::{self, Atlas};
 
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::time::Instant;
+use log::debug;
 
 /// Entry in cache corresponding to an image handle
 #[derive(Debug)]
@@ -46,16 +48,26 @@ pub struct Cache {
 impl Cache {
     /// Load image
     pub fn load(&mut self, handle: &image::Handle) -> &mut Memory {
+        let start = Instant::now();
+        
         if self.contains(handle) {
+            debug!("iced_wgpu: Cache hit for image handle");
             return self.get(handle).unwrap();
         }
-
+        
+        debug!("iced_wgpu: Cache miss - loading image from handle");
+        
+        let load_start = Instant::now();
         let memory = match graphics::image::load(handle) {
-            Ok(image) => Memory::Host(image),
+            Ok(image) => {
+                debug!("iced_wgpu: Image load took {:?}", load_start.elapsed());
+                Memory::Host(image)
+            }
             Err(image_rs::error::ImageError::IoError(_)) => Memory::NotFound,
             Err(_) => Memory::Invalid,
         };
 
+        debug!("iced_wgpu: Memory allocation took {:?}", start.elapsed() - load_start.elapsed());
         self.should_trim = true;
 
         self.insert(handle, memory);

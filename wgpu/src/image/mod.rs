@@ -214,6 +214,7 @@ impl Pipeline {
         transformation: Transformation,
         scale: f32,
     ) {
+        println!("iced_wgpu - Pipeline::prepare() - Processing {} images", images.len());
         let nearest_instances: &mut Vec<Instance> = &mut Vec::new();
         let linear_instances: &mut Vec<Instance> = &mut Vec::new();
 
@@ -221,6 +222,15 @@ impl Pipeline {
             match &image {
                 #[cfg(feature = "image")]
                 Image::Raster(image, bounds) => {
+                    println!("iced_wgpu - Processing raster image with bounds: {:?}", bounds);
+                    
+                    if let Some(atlas_entry) = cache.upload_raster(device, encoder, &image.handle) {
+                        println!("iced_wgpu - Successfully uploaded raster image to atlas");
+                    } else {
+                        println!("iced_wgpu - Failed to upload raster image to atlas");
+                    }
+                    
+
                     if let Some(atlas_entry) =
                         cache.upload_raster(device, encoder, &image.handle)
                     {
@@ -397,6 +407,9 @@ impl Layer {
     }
 
     fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        println!("iced_wgpu - Layer::render() - Rendering nearest: {} instances, linear: {} instances", 
+            self.nearest.instance_count, 
+            self.linear.instance_count);
         self.nearest.render(render_pass);
         self.linear.render(render_pass);
     }

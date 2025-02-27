@@ -4,6 +4,8 @@ use crate::Widget;
 use std::any::{self, Any};
 use std::borrow::Borrow;
 use std::fmt;
+use std::time::Instant;
+use log::debug;
 
 /// A persistent state widget tree.
 ///
@@ -60,11 +62,21 @@ impl Tree {
     ) where
         Renderer: crate::Renderer,
     {
-        if self.tag == new.borrow().tag() {
-            new.borrow().diff(self);
+        let diff_start = Instant::now();
+        
+        let new_widget = new.borrow();
+        debug!("iced_core: Diffing widget tree with tag {:?}", new_widget.tag());
+
+        if self.tag == new_widget.tag() {
+            let widget_diff_start = Instant::now();
+            new_widget.diff(self);
+            debug!("iced_core: Widget diff took {:?}", widget_diff_start.elapsed());
         } else {
+            debug!("iced_core: Tag mismatch - recreating entire tree");
             *self = Self::new(new);
         }
+
+        debug!("iced_core: Total tree diff took {:?}", diff_start.elapsed());
     }
 
     /// Reconciles the children of the tree with the provided list of widgets.
@@ -74,11 +86,17 @@ impl Tree {
     ) where
         Renderer: crate::Renderer,
     {
+        use std::time::Instant;
+        let children_start = Instant::now();
+        debug!("iced_core: Diffing {} children", new_children.len());
+
         self.diff_children_custom(
             new_children,
             |tree, widget| tree.diff(widget.borrow()),
             |widget| Self::new(widget.borrow()),
         );
+
+        debug!("iced_core: Children diff took {:?}", children_start.elapsed());
     }
 
     /// Reconciles the children of the tree with the provided list of widgets using custom

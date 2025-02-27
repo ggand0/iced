@@ -7,6 +7,8 @@ use crate::core::widget;
 use crate::core::window;
 use crate::core::{Clipboard, Element, Layout, Rectangle, Shell, Size, Vector};
 use crate::overlay;
+use std::time::Instant;
+use log::debug;
 
 /// A set of interactive graphical elements with a specific [`Layout`].
 ///
@@ -185,6 +187,9 @@ where
     ) -> (State, Vec<event::Status>) {
         use std::mem::ManuallyDrop;
 
+        let update_start = Instant::now();
+        debug!("iced_runtime: Starting UI update with {} events", events.len());
+
         let mut outdated = false;
         let mut redraw_request = None;
 
@@ -208,6 +213,7 @@ where
             let mut event_statuses = Vec::new();
 
             for event in events.iter().cloned() {
+                let event_start = Instant::now();
                 let mut shell = Shell::new(messages);
 
                 let event_status = overlay.on_event(
@@ -264,6 +270,7 @@ where
                 }
 
                 if shell.are_widgets_invalid() {
+                    debug!("iced_runtime: Widgets invalidated - will trigger redraw");
                     outdated = true;
                 }
             }
@@ -308,6 +315,7 @@ where
 
                 let mut shell = Shell::new(messages);
 
+                let event_start = Instant::now();
                 let event_status = self.root.as_widget_mut().on_event(
                     &mut self.state,
                     event,
@@ -318,6 +326,8 @@ where
                     &mut shell,
                     &viewport,
                 );
+
+                debug!("iced_runtime: Event processing took {:?}", event_start.elapsed());
 
                 if matches!(event_status, event::Status::Captured) {
                     self.overlay = None;
@@ -344,12 +354,15 @@ where
                 });
 
                 if shell.are_widgets_invalid() {
+                    debug!("iced_runtime: Widgets invalidated - will trigger redraw");
                     outdated = true;
                 }
 
                 event_status.merge(overlay_status)
             })
             .collect();
+
+        debug!("iced_runtime: Total update took {:?}", update_start.elapsed());
 
         (
             if outdated {

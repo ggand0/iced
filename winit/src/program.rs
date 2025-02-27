@@ -31,6 +31,7 @@ use rustc_hash::FxHashMap;
 use std::borrow::Cow;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
+use log::debug;
 
 /// An interactive, native, cross-platform, multi-windowed application.
 ///
@@ -792,13 +793,15 @@ async fn run_instance<P, C>(
                             .get_mut(&id)
                             .expect("Get user interface");
 
-                        let (ui_state, _) = ui.update(
+                        let update_start = std::time::Instant::now();
+                        let (ui_state, statuses) = ui.update(
                             &[redraw_event.clone()],
                             cursor,
                             &mut window.renderer,
                             &mut clipboard,
                             &mut messages,
                         );
+                        debug!("iced_winit: UI update took {:?}", update_start.elapsed());
 
                         debug.draw_started();
                         let new_mouse_interaction = ui.draw(
@@ -855,9 +858,10 @@ async fn run_instance<P, C>(
                         if window.viewport_version
                             != window.state.viewport_version()
                         {
+                            let layout_start = std::time::Instant::now();
                             let logical_size = window.state.logical_size();
-
-                            debug.layout_started();
+                            
+                            debug!("iced_winit: Starting layout pass for size {:?}", logical_size);
                             let ui = user_interfaces
                                 .remove(&id)
                                 .expect("Remove user interface");
@@ -866,7 +870,7 @@ async fn run_instance<P, C>(
                                 id,
                                 ui.relayout(logical_size, &mut window.renderer),
                             );
-                            debug.layout_finished();
+                            debug!("iced_winit: Layout pass took {:?}", layout_start.elapsed());
 
                             debug.draw_started();
                             let new_mouse_interaction = user_interfaces

@@ -32,6 +32,7 @@ advanced = []
 iced_renderer.workspace = true
 iced_runtime.workspace = true
 
+log = "0.4.20"
 num-traits.workspace = true
 once_cell.workspace = true
 rustc-hash.workspace = true

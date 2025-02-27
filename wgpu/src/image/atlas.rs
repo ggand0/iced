@@ -16,6 +16,8 @@ use crate::core::Size;
 use crate::graphics::color;
 
 use std::sync::Arc;
+use std::time::Instant;
+use log::debug;
 
 #[derive(Debug)]
 pub struct Atlas {
@@ -194,7 +196,14 @@ impl Atlas {
         }
     }
 
-    fn allocate(&mut self, width: u32, height: u32) -> Option<Entry> {
+    pub fn allocate(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Option<Entry> {
+        let start = Instant::now();
+        debug!("iced_wgpu: Attempting atlas allocation for size {:?}", Size::new(width, height));
+        
         // Allocate one layer if texture fits perfectly
         if width == SIZE && height == SIZE {
             let mut empty_layers = self

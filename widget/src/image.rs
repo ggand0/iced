@@ -30,6 +30,7 @@ use crate::core::{
 };
 
 pub use image::{FilterMethod, Handle};
+use log::debug;
 
 /// Creates a new [`Viewer`] with the given image `Handle`.
 pub fn viewer<Handle>(handle: Handle) -> Viewer<Handle> {
@@ -134,10 +135,11 @@ pub fn layout<Renderer, Handle>(
 where
     Renderer: image::Renderer<Handle = Handle>,
 {
-    // The raw w/h of the underlying image
+    let start = std::time::Instant::now();
+    
+    // This call might be expensive
     let image_size = renderer.measure_image(handle);
-    let image_size =
-        Size::new(image_size.width as f32, image_size.height as f32);
+    let image_size = Size::new(image_size.width as f32, image_size.height as f32);
 
     // The rotated size of the image
     let rotated_size = rotation.apply(image_size);
@@ -159,6 +161,7 @@ where
             _ => raw_size.height,
         },
     };
+    debug!("iced_widget: Layout took {:?}", start.elapsed());
 
     layout::Node::new(final_size)
 }

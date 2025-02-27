@@ -121,15 +121,22 @@ impl Renderer {
         viewport: &Viewport,
         overlay: &[T],
     ) {
+        use std::time::Instant;
+        let start = Instant::now();
+        
         self.draw_overlay(overlay, viewport);
+        //println!("iced_wgpu - present() - before prepare() / render()");
         self.prepare(engine, device, queue, format, encoder, viewport);
         self.render(engine, encoder, frame, clear_color, viewport);
 
         self.triangle_storage.trim();
         self.text_storage.trim();
 
+        // 02/26/25 debug: trying disabling this
         #[cfg(any(feature = "svg", feature = "image"))]
         self.image_cache.borrow_mut().trim();
+
+        println!("iced_wgpu - Frame render time: {:?}", start.elapsed());
     }
 
     fn prepare(
@@ -141,6 +148,9 @@ impl Renderer {
         encoder: &mut wgpu::CommandEncoder,
         viewport: &Viewport,
     ) {
+        use std::time::Instant;
+        let start = Instant::now();
+        
         let scale_factor = viewport.scale_factor() as f32;
 
         self.text_viewport.update(queue, viewport.physical_size());
@@ -182,6 +192,13 @@ impl Renderer {
                 }
             }
 
+            /*#[cfg(any(feature = "svg", feature = "image"))]
+            if !layer.images.is_empty() {
+                println!("iced_wgpu - prepare() - Renderer detected {} images!", layer.images.len());
+            } else {
+                println!("iced_wgpu - prepare() - No images detected in Renderer.");
+            }*/
+
             #[cfg(any(feature = "svg", feature = "image"))]
             if !layer.images.is_empty() {
                 engine.image_pipeline.prepare(
@@ -208,6 +225,8 @@ impl Renderer {
                 );
             }
         }
+
+        println!("iced_wgpu - Preparation time: {:?}", start.elapsed());
     }
 
     fn render(
@@ -358,6 +377,14 @@ impl Renderer {
                     },
                 ));
             }
+
+            #[cfg(any(feature = "svg", feature = "image"))]
+            /*if !layer.images.is_empty() {
+                println!("iced_wgpu - render(): Rendering {} images now", layer.images.len());
+            } else {
+                println!("iced_wgpu - render(): No images to render.");
+            }*/
+
 
             #[cfg(any(feature = "svg", feature = "image"))]
             if !layer.images.is_empty() {
