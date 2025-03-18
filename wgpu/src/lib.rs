@@ -616,3 +616,15 @@ impl graphics::compositor::Default for crate::Renderer {
 pub fn get_image_fps() -> f64 {
     image::get_image_display_fps()
 }
+
+#[allow(dead_code)]
+#[cfg(any(feature = "image", feature = "svg"))]
+pub fn get_image_upload_timestamps() -> std::collections::VecDeque<std::time::Instant> {
+    image::get_image_upload_timestamps()
+}
+
+#[allow(dead_code)]
+#[cfg(any(feature = "image", feature = "svg"))]
+pub fn sync_image_tracker_timestamps(timestamps: std::collections::VecDeque<std::time::Instant>) {
+    image::sync_image_tracker_timestamps(timestamps)
+}

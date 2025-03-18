@@ -682,6 +682,26 @@ impl ImageDisplayTracker {
     pub fn get_fps(&self) -> f64 {
         self.fps
     }
+
+
+    /// Get a copy of the recent upload timestamps for syncing with application
+    pub fn get_timestamps(&self) -> VecDeque<Instant> {
+        self.upload_timestamps.clone()
+    }
+    
+    /// Get the size of tracked timestamps
+    pub fn timestamps_count(&self) -> usize {
+        self.upload_timestamps.len()
+    }
+    
+    /// Allow the application to initialize this tracker with external timestamps
+    pub fn sync_from_external(&mut self, timestamps: VecDeque<Instant>) {
+        // Only sync if we're getting meaningful data
+        if !timestamps.is_empty() {
+            self.upload_timestamps = timestamps;
+            self.calculate_fps();
+        }
+    }
 }
 
 
@@ -699,4 +719,20 @@ pub fn get_image_display_fps() -> f64 {
         return tracker.get_fps();
     }
     0.0
+}
+
+/// Get the internal timestamps from the image tracker
+/// This allows applications to sync their own FPS calculations
+pub fn get_image_upload_timestamps() -> VecDeque<Instant> {
+    if let Ok(tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        return tracker.get_timestamps();
+    }
+    VecDeque::new()
+}
+
+/// Sync the tracker with external timestamps (for bidirectional sync)
+pub fn sync_image_tracker_timestamps(timestamps: VecDeque<Instant>) {
+    if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        tracker.sync_from_external(timestamps);
+    }
 }
