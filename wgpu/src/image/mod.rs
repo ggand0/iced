@@ -615,6 +615,7 @@ pub static IMAGE_DISPLAY_TRACKER: Lazy<Mutex<ImageDisplayTracker>> =
     Lazy::new(|| Mutex::new(ImageDisplayTracker::new()));
 
 /// Tracks when unique images are displayed to calculate true image rendering FPS
+#[derive(Debug)]
 pub struct ImageDisplayTracker {    
     // Window duration for FPS calculation
     window_duration: Duration,
@@ -693,7 +694,6 @@ pub fn record_image_upload(handle_hash: String, width: u32, height: u32) {
 
 /// Get the current image rendering FPS 
 /// This is a global function accessible to applications
-#[allow(dead_code)]
 pub fn get_image_display_fps() -> f64 {
     if let Ok(tracker) = IMAGE_DISPLAY_TRACKER.lock() {
         return tracker.get_fps();
