@@ -39,7 +39,7 @@ mod triangle;
 
 #[cfg(any(feature = "image", feature = "svg"))]
 #[path = "image/mod.rs"]
-mod image;
+pub mod image;
 
 #[cfg(not(any(feature = "image", feature = "svg")))]
 #[path = "image/null.rs"]
@@ -612,6 +612,7 @@ impl graphics::compositor::Default for crate::Renderer {
 /// Get the current image rendering FPS 
 /// This is a global function accessible to applications
 #[allow(dead_code)]
+#[cfg(any(feature = "image", feature = "svg"))]
 pub fn get_image_fps() -> f64 {
     image::get_image_display_fps()
 }
