@@ -16,6 +16,13 @@ use bytemuck::{Pod, Zeroable};
 
 use std::mem;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::collections::VecDeque;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
 
 pub use crate::graphics::Image;
 
@@ -224,7 +231,7 @@ impl Pipeline {
                 Image::Raster(image, bounds) => {
                     println!("iced_wgpu - Processing raster image with bounds: {:?}", bounds);
                     
-                    if let Some(atlas_entry) = cache.upload_raster(device, encoder, &image.handle) {
+                    if let Some(_atlas_entry) = cache.upload_raster(device, encoder, &image.handle) {
                         println!("iced_wgpu - Successfully uploaded raster image to atlas");
                     } else {
                         println!("iced_wgpu - Failed to upload raster image to atlas");
@@ -317,7 +324,7 @@ impl Pipeline {
         layer: usize,
         bounds: Rectangle<u32>,
         render_pass: &mut wgpu::RenderPass<'a>,
-    ) {
+    ) -> usize {
         if let Some(layer) = self.layers.get(layer) {
             render_pass.set_pipeline(&self.pipeline);
 
@@ -330,7 +337,9 @@ impl Pipeline {
 
             render_pass.set_bind_group(1, cache.bind_group(), &[]);
 
-            layer.render(render_pass);
+            layer.render(render_pass)
+        } else {
+            0
         }
     }
 
@@ -406,12 +415,18 @@ impl Layer {
         self.linear.upload(device, encoder, belt, linear_instances);
     }
 
-    fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+    fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) -> usize {
+        let total_instances = self.nearest.instance_count + self.linear.instance_count;
+        
         println!("iced_wgpu - Layer::render() - Rendering nearest: {} instances, linear: {} instances", 
             self.nearest.instance_count, 
             self.linear.instance_count);
+        
         self.nearest.render(render_pass);
         self.linear.render(render_pass);
+        
+        // Return the total instances so Pipeline can update metrics
+        total_instances
     }
 }
 
@@ -615,4 +630,180 @@ fn add_instance(
     };
 
     instances.push(instance);
+}
+
+// Make frame counter public
+pub static FRAME_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+// Store information about unique images displayed
+pub static IMAGE_DISPLAY_TRACKER: Lazy<Mutex<ImageDisplayTracker>> = 
+    Lazy::new(|| Mutex::new(ImageDisplayTracker::new()));
+
+/// Increment the frame counter and return the new value
+pub fn next_frame_id() -> usize {
+    FRAME_COUNTER.fetch_add(1, Ordering::SeqCst)
+}
+
+/// Get the current frame counter value
+pub fn current_frame_id() -> usize {
+    FRAME_COUNTER.load(Ordering::SeqCst)
+}
+
+/// Tracks when unique images are displayed to calculate true image rendering FPS
+pub struct ImageDisplayTracker {
+    // Set of currently displayed image identifiers
+    current_frame_images: HashSet<String>,
+    
+    // Previous frame's image identifiers
+    previous_frame_images: HashSet<String>,
+    
+    // Timestamps when display content changed
+    change_timestamps: VecDeque<Instant>,
+    
+    // Window duration for FPS calculation
+    window_duration: Duration,
+    
+    // Upload timestamps for FPS calculation
+    upload_timestamps: VecDeque<Instant>,
+    
+    // Recently uploaded images
+    uploaded_images: HashSet<String>,
+    
+    // Calculated FPS value
+    fps: f64,
+    
+    // Debug counter
+    frame_counter: usize,
+}
+
+impl ImageDisplayTracker {
+    fn new() -> Self {
+        Self {
+            current_frame_images: HashSet::new(),
+            previous_frame_images: HashSet::new(),
+            change_timestamps: VecDeque::with_capacity(120),
+            window_duration: Duration::from_secs(5),
+            upload_timestamps: VecDeque::with_capacity(120),
+            uploaded_images: HashSet::new(),
+            fps: 0.0,
+            frame_counter: 0,
+        }
+    }
+
+    /// Register a new frame of image display
+    pub fn start_frame(&mut self) {
+        self.current_frame_images.clear();
+        self.frame_counter += 1;
+    }
+    
+    /// Register an image being displayed in the current frame
+    pub fn register_image(&mut self, image_id: String, width: u32, height: u32) {
+        // Create a meaningful ID including dimensions
+        let full_id = format!("{}@{}x{}", image_id, width, height);
+        let _ = self.current_frame_images.insert(full_id);
+    }
+    
+    /// Record an image upload for FPS tracking
+    pub fn record_image_upload(&mut self, handle_hash: String, width: u32, height: u32) {
+        // Create meaningful identifier with dimensions
+        let identifier = format!("{}@{}x{}", handle_hash, width, height);
+        
+        // Add to set of recently uploaded images - explicitly discard the result
+        let _ = self.uploaded_images.insert(identifier);
+        
+        // Record timestamp
+        self.upload_timestamps.push_back(Instant::now());
+        
+        // Calculate FPS
+        self.calculate_fps();
+        
+        //println!("Image upload detected! Current upload FPS: {:.2}", self.fps);
+    }
+    
+    /// Calculate FPS from upload timestamps
+    fn calculate_fps(&mut self) {
+        // Prune old timestamps
+        let cutoff = Instant::now() - self.window_duration;
+        while !self.upload_timestamps.is_empty() && 
+              self.upload_timestamps.front().unwrap() < &cutoff {
+            let _ = self.upload_timestamps.pop_front();
+        }
+        
+        if self.upload_timestamps.len() > 1 {
+            let oldest = self.upload_timestamps.front().unwrap();
+            let newest = self.upload_timestamps.back().unwrap();
+            let time_span = newest.duration_since(*oldest).as_secs_f64();
+            
+            if time_span > 0.0 {
+                self.fps = (self.upload_timestamps.len() - 1) as f64 / time_span;
+            }
+        } else {
+            self.fps = 0.0;
+        }
+    }
+    
+    /// End the frame and detect if content changed
+    pub fn end_frame(&mut self) -> bool {
+        // Compare with previous frame to detect change
+        let changed = self.current_frame_images != self.previous_frame_images;
+        
+        if changed {
+            //println!("DISPLAY CHANGED: Frame #{} - {} new images", 
+            //         self.frame_counter, self.current_frame_images.len());
+                     
+            // Store timestamp of the change
+            self.change_timestamps.push_back(Instant::now());
+            
+            // Prune old timestamps
+            let cutoff = Instant::now() - self.window_duration;
+            while !self.change_timestamps.is_empty() && 
+                  self.change_timestamps.front().unwrap() < &cutoff {
+                let _ = self.change_timestamps.pop_front();
+            }
+        }
+        
+        // Save current state for next comparison
+        std::mem::swap(&mut self.current_frame_images, &mut self.previous_frame_images);
+        
+        changed
+    }
+    
+    /// Get image rendering FPS based on content changes
+    pub fn get_fps(&self) -> f64 {
+        self.fps
+    }
+}
+
+// Public API
+pub fn start_display_frame() {
+    if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        tracker.start_frame();
+    }
+}
+
+pub fn register_displayed_image(image_id: String, width: u32, height: u32) {
+    if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        tracker.register_image(image_id, width, height);
+    }
+}
+
+pub fn end_display_frame() -> bool {
+    if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        return tracker.end_frame();
+    }
+    false
+}
+
+pub fn get_image_display_fps() -> f64 {
+    if let Ok(tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        return tracker.get_fps();
+    }
+    0.0
+}
+
+// Function to record image uploads
+pub fn record_image_upload(handle_hash: String, width: u32, height: u32) {
+    if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        tracker.record_image_upload(handle_hash, width, height);
+    }
 }

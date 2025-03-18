@@ -67,6 +67,8 @@ use crate::core::{
 use crate::graphics::text::{Editor, Paragraph};
 use crate::graphics::Viewport;
 
+use std::sync::{Arc, Mutex};
+
 /// A [`wgpu`] graphics renderer for [`iced`].
 ///
 /// [`wgpu`]: https://github.com/gfx-rs/wgpu-rs
@@ -84,6 +86,9 @@ pub struct Renderer {
     // TODO: Centralize all the image feature handling
     #[cfg(any(feature = "svg", feature = "image"))]
     image_cache: std::cell::RefCell<image::Cache>,
+    
+    #[cfg(any(feature = "svg", feature = "image"))]
+    image_fps_tracker: std::cell::RefCell<f64>,
 }
 
 impl Renderer {
@@ -106,6 +111,9 @@ impl Renderer {
             image_cache: std::cell::RefCell::new(
                 engine.create_image_cache(device),
             ),
+            
+            #[cfg(any(feature = "svg", feature = "image"))]
+            image_fps_tracker: std::cell::RefCell::new(0.0),
         }
     }
 
@@ -136,7 +144,7 @@ impl Renderer {
         #[cfg(any(feature = "svg", feature = "image"))]
         self.image_cache.borrow_mut().trim();
 
-        println!("iced_wgpu - Frame render time: {:?}", start.elapsed());
+        //println!("iced_wgpu - Frame render time: {:?}", start.elapsed());
     }
 
     fn prepare(
@@ -226,7 +234,7 @@ impl Renderer {
             }
         }
 
-        println!("iced_wgpu - Preparation time: {:?}", start.elapsed());
+        //println!("iced_wgpu - Preparation time: {:?}", start.elapsed());
     }
 
     fn render(
@@ -285,6 +293,11 @@ impl Renderer {
         ));
 
         let scale = Transformation::scale(scale_factor);
+
+        #[cfg(any(feature = "svg", feature = "image"))]
+        let mut total_images_rendered = 0;
+        #[cfg(any(feature = "svg", feature = "image"))]
+        let mut rendered_image_identifiers = Vec::new();
 
         for layer in self.layers.iter() {
             let Some(physical_bounds) =
@@ -379,22 +392,50 @@ impl Renderer {
             }
 
             #[cfg(any(feature = "svg", feature = "image"))]
-            /*if !layer.images.is_empty() {
-                println!("iced_wgpu - render(): Rendering {} images now", layer.images.len());
-            } else {
-                println!("iced_wgpu - render(): No images to render.");
-            }*/
-
-
-            #[cfg(any(feature = "svg", feature = "image"))]
             if !layer.images.is_empty() {
-                engine.image_pipeline.render(
+                // Collect image identifiers before rendering
+                for image in &layer.images {
+                    match image {
+                        #[cfg(feature = "image")]
+                        crate::image::Image::Raster(img, _) => {
+                            // Extract image properties
+                            let handle = format!("{:?}", img.handle);
+                            
+                            // Simply collect the identifier for logging
+                            rendered_image_identifiers.push(handle);
+                        }
+                        #[cfg(feature = "svg")]
+                        crate::image::Image::Vector(svg, _) => {
+                            // Use the current frame ID for SVG images
+                            let frame_id = image::current_frame_id();
+                            
+                            // Create a unique identifier including the frame ID
+                            let handle_id = format!("SVGImage-frame{}", frame_id);
+                            rendered_image_identifiers.push(handle_id);
+                        }
+                        _ => {}
+                    }
+                }
+                
+                // Print more details about collected identifiers
+                /*println!("Rendered {} total images, collected {} identifiers", 
+                    total_images_rendered, rendered_image_identifiers.len());
+                
+                if !rendered_image_identifiers.is_empty() {
+                    println!("SAMPLE IDENTIFIERS:");
+                    for (i, id) in rendered_image_identifiers.iter().enumerate().take(3) {
+                        println!("Image ID {}: {}", i, id);
+                    }
+                }*/
+                
+                let images_rendered = engine.image_pipeline.render(
                     &image_cache,
                     image_layer,
                     scissor_rect,
                     &mut render_pass,
                 );
-
+                
+                total_images_rendered += images_rendered;
                 image_layer += 1;
             }
 
@@ -411,6 +452,22 @@ impl Renderer {
         }
 
         let _ = ManuallyDrop::into_inner(render_pass);
+
+        // Update FPS metrics based on the image content that was rendered
+        #[cfg(any(feature = "svg", feature = "image"))]
+        if total_images_rendered > 0 {
+            //println!("Rendered frame with {} total images, collected {} unique identifiers", 
+            //    total_images_rendered, rendered_image_identifiers.len());
+            //
+            //// Print a sample of identifiers
+            //for (i, id) in rendered_image_identifiers.iter().enumerate().take(3) {
+            //    println!("Image ID {}: {}", i, id);
+            //}
+            
+            // Update with our new API
+            let fps = image::get_image_display_fps();
+            //println!("Current image display FPS: {:.2}", fps);
+        }
     }
 
     fn draw_overlay(
@@ -455,6 +512,18 @@ impl Renderer {
                 }
             },
         );
+    }
+
+    /// Get the current image rendering FPS metrics
+    #[cfg(any(feature = "svg", feature = "image"))]
+    pub fn image_fps(&self) -> f64 {
+        // Update the stored FPS value from our tracker
+        if let Ok(mut fps_value) = self.image_fps_tracker.try_borrow_mut() {
+            *fps_value = image::get_image_display_fps();
+        }
+        
+        // Return the last known value
+        *self.image_fps_tracker.borrow()
     }
 }
 
@@ -634,4 +703,10 @@ impl primitive::Renderer for Renderer {
 
 impl graphics::compositor::Default for crate::Renderer {
     type Compositor = window::Compositor;
+}
+
+/// Get the current image rendering FPS 
+/// This is a global function accessible to applications
+pub fn get_image_fps() -> f64 {
+    image::get_image_display_fps()
 }
