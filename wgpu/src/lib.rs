@@ -608,3 +608,10 @@ impl primitive::Renderer for Renderer {
 impl graphics::compositor::Default for crate::Renderer {
     type Compositor = window::Compositor;
 }
+
+/// Get the current image rendering FPS 
+/// This is a global function accessible to applications
+#[allow(dead_code)]
+pub fn get_image_fps() -> f64 {
+    image::get_image_display_fps()
+}

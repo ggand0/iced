@@ -16,6 +16,11 @@ use bytemuck::{Pod, Zeroable};
 
 use std::mem;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
 
 pub use crate::graphics::Image;
 
@@ -602,4 +607,96 @@ fn add_instance(
     };
 
     instances.push(instance);
+}
+
+
+// Store information about unique images displayed
+pub static IMAGE_DISPLAY_TRACKER: Lazy<Mutex<ImageDisplayTracker>> = 
+    Lazy::new(|| Mutex::new(ImageDisplayTracker::new()));
+
+/// Tracks when unique images are displayed to calculate true image rendering FPS
+pub struct ImageDisplayTracker {    
+    // Window duration for FPS calculation
+    window_duration: Duration,
+    
+    // Upload timestamps for FPS calculation
+    upload_timestamps: VecDeque<Instant>,
+    
+    // Recently uploaded images
+    uploaded_images: HashSet<String>,
+    
+    // Calculated FPS value
+    fps: f64,
+}
+
+impl ImageDisplayTracker {
+    fn new() -> Self {
+        Self {
+            window_duration: Duration::from_secs(5),
+            upload_timestamps: VecDeque::with_capacity(120),
+            uploaded_images: HashSet::new(),
+            fps: 0.0,
+        }
+    }
+    
+    /// Record an image upload for FPS tracking
+    pub fn record_image_upload(&mut self, handle_hash: String, width: u32, height: u32) {
+        // Create meaningful identifier with dimensions
+        let identifier = format!("{}@{}x{}", handle_hash, width, height);
+        
+        // Add to set of recently uploaded images - explicitly discard the result
+        let _ = self.uploaded_images.insert(identifier);
+        
+        // Record timestamp
+        self.upload_timestamps.push_back(Instant::now());
+        
+        // Calculate FPS
+        self.calculate_fps();
+    }
+    
+    /// Calculate FPS from upload timestamps
+    fn calculate_fps(&mut self) {
+        // Prune old timestamps
+        let cutoff = Instant::now() - self.window_duration;
+        while !self.upload_timestamps.is_empty() && 
+              self.upload_timestamps.front().unwrap() < &cutoff {
+            let _ = self.upload_timestamps.pop_front();
+        }
+        
+        if self.upload_timestamps.len() > 1 {
+            let oldest = self.upload_timestamps.front().unwrap();
+            let newest = self.upload_timestamps.back().unwrap();
+            let time_span = newest.duration_since(*oldest).as_secs_f64();
+            
+            if time_span > 0.0 {
+                self.fps = (self.upload_timestamps.len() - 1) as f64 / time_span;
+            }
+        } else {
+            self.fps = 0.0;
+        }
+    }
+
+    /// Get image rendering FPS based on content changes
+    #[allow(dead_code)]
+    pub fn get_fps(&self) -> f64 {
+        self.fps
+    }
+}
+
+
+// Function to record image uploads
+pub fn record_image_upload(handle_hash: String, width: u32, height: u32) {
+    if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        tracker.record_image_upload(handle_hash, width, height);
+    }
+}
+
+/// Get the current image rendering FPS 
+/// This is a global function accessible to applications
+#[allow(dead_code)]
+pub fn get_image_display_fps() -> f64 {
+    if let Ok(tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        return tracker.get_fps();
+    }
+    0.0
 }
