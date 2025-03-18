@@ -159,12 +159,16 @@ where
         _viewport: &Rectangle,
     ) {
         let bounds = layout.bounds();
+        //println!("SHADER_WIDGET_DEBUG: Layout bounds in draw(): {:?}", bounds);
+        
         let state = tree.state.downcast_ref::<P::State>();
-
-        renderer.draw_primitive(
-            bounds,
-            self.program.draw(state, cursor_position, bounds),
-        );
+        
+        // Call program.draw and capture the primitive for logging
+        let primitive = self.program.draw(state, cursor_position, bounds);
+        
+        //println!("SHADER_WIDGET_DEBUG: After program.draw(), about to call renderer.draw_primitive()");
+        
+        renderer.draw_primitive(bounds, primitive);
     }
 }
 

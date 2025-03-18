@@ -135,20 +135,25 @@ pub fn layout<Renderer, Handle>(
 where
     Renderer: image::Renderer<Handle = Handle>,
 {
+    let debug = false;
     let start = std::time::Instant::now();
-    
+
     // This call might be expensive
     let image_size = renderer.measure_image(handle);
     let image_size = Size::new(image_size.width as f32, image_size.height as f32);
+    
 
     // The rotated size of the image
     let rotated_size = rotation.apply(image_size);
+    
 
     // The size to be available to the widget prior to `Shrink`ing
     let raw_size = limits.resolve(width, height, rotated_size);
+    
 
     // The uncropped size of the image when fit to the bounds above
     let full_size = content_fit.fit(rotated_size, raw_size);
+    
 
     // Shrink the widget to fit the resized image, if requested
     let final_size = Size {
@@ -161,7 +166,20 @@ where
             _ => raw_size.height,
         },
     };
-    debug!("iced_widget: Layout took {:?}", start.elapsed());
+
+    if debug {
+        println!("IMAGE_LAYOUT_DEBUG: Input width={:?}, height={:?}", width, height);
+        println!("IMAGE_LAYOUT_DEBUG: Limits min={:?}, max={:?}", limits.min(), limits.max());
+        println!("IMAGE_LAYOUT_DEBUG: Original image_size: {:?}", image_size);
+        println!("IMAGE_LAYOUT_DEBUG: Rotated size: {:?}", rotated_size);
+        println!("IMAGE_LAYOUT_DEBUG: Raw size after limits.resolve(): {:?}", raw_size);
+        println!("IMAGE_LAYOUT_DEBUG: Full size after content_fit: {:?}", full_size);
+        println!("IMAGE_LAYOUT_DEBUG: Final size after shrink adjustment: {:?}", final_size);
+    
+        debug!("iced_widget: Layout took {:?}", start.elapsed());
+    }
+
+    
 
     layout::Node::new(final_size)
 }
@@ -184,7 +202,11 @@ pub fn draw<Renderer, Handle>(
     let rotated_size = rotation.apply(image_size);
 
     let bounds = layout.bounds();
+    println!("IMAGE_DEBUG: Initial bounds: {:?}", bounds);
+    
     let adjusted_fit = content_fit.fit(rotated_size, bounds.size());
+    println!("IMAGE_DEBUG: Image size: {:?}, rotated_size: {:?}, adjusted_fit: {:?}", 
+             image_size, rotated_size, adjusted_fit);
 
     let scale = Vector::new(
         adjusted_fit.width / rotated_size.width,
@@ -192,6 +214,7 @@ pub fn draw<Renderer, Handle>(
     );
 
     let final_size = image_size * scale;
+    println!("IMAGE_DEBUG: Scale: {:?}, final_size: {:?}", scale, final_size);
 
     let position = match content_fit {
         ContentFit::None => Point::new(
@@ -203,8 +226,10 @@ pub fn draw<Renderer, Handle>(
             bounds.center_y() - final_size.height / 2.0,
         ),
     };
+    println!("IMAGE_DEBUG: Position: {:?}", position);
 
     let drawing_bounds = Rectangle::new(position, final_size);
+    println!("IMAGE_DEBUG: Drawing bounds: {:?}", drawing_bounds);
 
     let render = |renderer: &mut Renderer| {
         renderer.draw_image(
