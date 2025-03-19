@@ -75,6 +75,8 @@ impl Engine {
         queue: &wgpu::Queue,
         encoder: wgpu::CommandEncoder,
     ) -> wgpu::SubmissionIndex {
+        let render_start = std::time::Instant::now();
+        
         self.staging_belt.finish();
         let index = queue.submit(Some(encoder.finish()));
         self.staging_belt.recall();
@@ -84,7 +86,15 @@ impl Engine {
         self.triangle_pipeline.end_frame();
 
         #[cfg(any(feature = "image", feature = "svg"))]
-        self.image_pipeline.end_frame();
+        {
+            // Record render time
+            let render_duration = render_start.elapsed();
+            if render_duration.as_millis() > 30 {
+                println!("SLOW GPU SUBMIT: {:.2}ms", render_duration.as_secs_f64() * 1000.0);
+            }
+            crate::image::record_image_render_duration(render_duration);
+            self.image_pipeline.end_frame();
+        }
 
         index
     }

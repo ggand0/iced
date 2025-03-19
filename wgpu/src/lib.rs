@@ -638,3 +638,19 @@ pub fn get_image_rendering_stats() -> (f64, f64, f64) {
     }
     (0.0, 0.0, 0.0)
 }
+
+/// Get comprehensive image rendering diagnostics
+pub fn get_image_rendering_diagnostics() -> (f64, f64, f64, f64, f64, usize) {
+    if let Ok(tracker) = image::IMAGE_DISPLAY_TRACKER.lock() {
+        let (fps, avg_upload, avg_render, min_render, max_render) = 
+            tracker.get_detailed_timing_stats();
+        let frame_count = tracker.total_frames_rendered;
+        return (fps, avg_upload, avg_render, min_render, max_render, frame_count);
+    }
+    (0.0, 0.0, 0.0, 0.0, 0.0, 0)
+}
+
+/// Log current image rendering performance stats
+pub fn log_image_rendering_stats() {
+    let _ = image::get_image_rendering_stats_with_logging();
+}
