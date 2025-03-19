@@ -313,7 +313,7 @@ impl Atlas {
         }
     }
 
-    fn upload_allocation(
+    pub fn upload_allocation(
         &mut self,
         data: &[u8],
         image_width: u32,
@@ -469,5 +469,39 @@ impl Atlas {
         };
         
         (total_allocations, fragmented_count, fragmentation_ratio)
+    }
+
+    // Add method to get allocation from an entry
+    pub fn allocate_entry(
+        &mut self,
+        device: &wgpu::Device,
+        extent: wgpu::Extent3d,
+    ) -> Option<Entry> {
+        let width = extent.width;
+        let height = extent.height;
+        
+        let current_size = self.layers.len();
+        let entry = self.allocate(width, height)?;
+
+        // We grow the internal texture after allocating if necessary
+        let new_layers = self.layers.len() - current_size;
+        
+        if new_layers > 0 {
+            log::debug!("Growing atlas by {} layers", new_layers);
+        }
+        
+        Some(entry)
+    }
+    
+    // Separate the grow operation from allocation
+    pub fn grow_if_needed(
+        &mut self,
+        new_layers: usize,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        if new_layers > 0 {
+            self.grow(new_layers, device, encoder);
+        }
     }
 }

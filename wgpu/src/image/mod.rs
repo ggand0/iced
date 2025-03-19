@@ -2,6 +2,7 @@ pub(crate) mod cache;
 pub(crate) use cache::Cache;
 
 mod atlas;
+mod staging;
 
 #[cfg(feature = "image")]
 mod raster;
@@ -818,6 +819,33 @@ impl ImageDisplayTracker {
         };
         
         (avg_upload, avg_render)
+    }
+
+    // Add method to start upload timing
+    pub fn start_upload_timing(&mut self) {
+        self.current_upload_start = Some(Instant::now());
+    }
+    
+    // Add method to handle batch uploads
+    pub fn record_batch_upload_complete(&mut self, count: usize) {
+        if let Some(start) = self.current_upload_start.take() {
+            let duration = start.elapsed();
+            
+            // Record the average duration per texture
+            if count > 0 {
+                let avg_duration = duration.div_f32(count as f32);
+                self.upload_durations.push_back(avg_duration);
+                
+                while self.upload_durations.len() > 100 {
+                    let _ = self.upload_durations.pop_front();
+                }
+                
+                if avg_duration.as_millis() > 20 {
+                    log::warn!("SLOW BATCH UPLOAD: {:.2}ms avg for {} textures", 
+                             avg_duration.as_secs_f64() * 1000.0, count);
+                }
+            }
+        }
     }
 }
 
