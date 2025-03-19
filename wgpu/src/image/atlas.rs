@@ -454,4 +454,20 @@ impl Atlas {
                 }],
             });
     }
+
+    // Get fragmentation metrics
+    pub fn get_fragmentation_stats(&self) -> (usize, usize, f32) {
+        let total_allocations = self.layers.len();
+        let fragmented_count = self.layers.iter()
+            .filter(|layer| matches!(layer, Layer::Busy(_)))
+            .count();
+        
+        let fragmentation_ratio = if total_allocations > 0 {
+            fragmented_count as f32 / total_allocations as f32
+        } else {
+            0.0
+        };
+        
+        (total_allocations, fragmented_count, fragmentation_ratio)
+    }
 }

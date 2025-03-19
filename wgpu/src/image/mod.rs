@@ -313,6 +313,8 @@ impl Pipeline {
         bounds: Rectangle<u32>,
         render_pass: &mut wgpu::RenderPass<'a>,
     ) {
+        let render_start = Instant::now();
+        
         if let Some(layer) = self.layers.get(layer) {
             render_pass.set_pipeline(&self.pipeline);
 
@@ -326,6 +328,11 @@ impl Pipeline {
             render_pass.set_bind_group(1, cache.bind_group(), &[]);
 
             layer.render(render_pass);
+        }
+        
+        // Record render duration
+        if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+            tracker.record_render_duration(render_start.elapsed());
         }
     }
 
@@ -628,6 +635,11 @@ pub struct ImageDisplayTracker {
     
     // Calculated FPS value
     fps: f64,
+    
+    // Add new timing fields
+    upload_durations: VecDeque<Duration>,
+    render_durations: VecDeque<Duration>,
+    current_upload_start: Option<Instant>,
 }
 
 impl ImageDisplayTracker {
@@ -637,6 +649,9 @@ impl ImageDisplayTracker {
             upload_timestamps: VecDeque::with_capacity(120),
             uploaded_images: HashSet::new(),
             fps: 0.0,
+            upload_durations: VecDeque::with_capacity(100),
+            render_durations: VecDeque::with_capacity(100),
+            current_upload_start: None,
         }
     }
     
@@ -653,6 +668,9 @@ impl ImageDisplayTracker {
         
         // Calculate FPS
         self.calculate_fps();
+        
+        // Start timing the upload process
+        self.current_upload_start = Some(Instant::now());
     }
     
     /// Calculate FPS from upload timestamps
@@ -701,6 +719,46 @@ impl ImageDisplayTracker {
             self.upload_timestamps = timestamps;
             self.calculate_fps();
         }
+    }
+
+    // Fix the upload_durations trimming
+    pub fn record_upload_complete(&mut self) {
+        if let Some(start) = self.current_upload_start.take() {
+            let duration = start.elapsed();
+            self.upload_durations.push_back(duration);
+            
+            // Trim old entries - use let _ = to explicitly discard the result
+            while self.upload_durations.len() > 100 {
+                let _ = self.upload_durations.pop_front();
+            }
+        }
+    }
+
+    // Fix the render_durations trimming
+    pub fn record_render_duration(&mut self, duration: Duration) {
+        self.render_durations.push_back(duration);
+        while self.render_durations.len() > 100 {
+            let _ = self.render_durations.pop_front();
+        }
+    }
+
+    // Add method to get average timings
+    pub fn get_timing_stats(&self) -> (f64, f64) {
+        let avg_upload = if self.upload_durations.is_empty() {
+            0.0
+        } else {
+            self.upload_durations.iter().sum::<Duration>().as_secs_f64() 
+                / self.upload_durations.len() as f64
+        };
+        
+        let avg_render = if self.render_durations.is_empty() {
+            0.0
+        } else {
+            self.render_durations.iter().sum::<Duration>().as_secs_f64()
+                / self.render_durations.len() as f64
+        };
+        
+        (avg_upload, avg_render)
     }
 }
 

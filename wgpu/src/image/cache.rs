@@ -2,6 +2,7 @@ use crate::core::{self, Size};
 use crate::image::atlas::{self, Atlas};
 
 use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Debug)]
 pub struct Cache {
@@ -52,7 +53,15 @@ impl Cache {
         encoder: &mut wgpu::CommandEncoder,
         handle: &core::image::Handle,
     ) -> Option<&atlas::Entry> {
-        self.raster.upload(device, encoder, handle, &mut self.atlas)
+        let upload_start = Instant::now();
+        
+        let result = self.raster.upload(device, encoder, handle, &mut self.atlas);
+        
+        if let Ok(mut tracker) = crate::image::IMAGE_DISPLAY_TRACKER.lock() {
+            tracker.record_upload_complete();
+        }
+        
+        result
     }
 
     #[cfg(feature = "svg")]
@@ -65,7 +74,9 @@ impl Cache {
         size: [f32; 2],
         scale: f32,
     ) -> Option<&atlas::Entry> {
-        self.vector.upload(
+        let upload_start = Instant::now();
+        
+        let result = self.vector.upload(
             device,
             encoder,
             handle,
@@ -73,7 +84,13 @@ impl Cache {
             size,
             scale,
             &mut self.atlas,
-        )
+        );
+        
+        if let Ok(mut tracker) = crate::image::IMAGE_DISPLAY_TRACKER.lock() {
+            tracker.record_upload_complete();
+        }
+        
+        result
     }
 
     pub fn trim(&mut self) {

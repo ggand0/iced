@@ -26,6 +26,9 @@ impl Engine {
         format: wgpu::TextureFormat,
         antialiasing: Option<Antialiasing>, // TODO: Initialize AA pipelines lazily
     ) -> Self {
+        let backend = _adapter.get_info().backend;
+        println!("Using GPU backend: {:?}", backend);
+        
         let text_pipeline = text::Pipeline::new(device, queue, format);
         let quad_pipeline = quad::Pipeline::new(device, format);
         let triangle_pipeline =
@@ -39,11 +42,12 @@ impl Engine {
         };
 
         Self {
-            // TODO: Resize belt smartly (?)
-            // It would be great if the `StagingBelt` API exposed methods
-            // for introspection to detect when a resize may be worth it.
             staging_belt: wgpu::util::StagingBelt::new(
-                buffer::MAX_WRITE_SIZE as u64,
+                if cfg!(target_os = "linux") {
+                    buffer::MAX_WRITE_SIZE as u64 * 4 // Larger for Linux
+                } else {
+                    buffer::MAX_WRITE_SIZE as u64     // Normal size for other platforms
+                }
             ),
             format,
 

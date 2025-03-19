@@ -129,4 +129,25 @@ impl Cache {
     fn contains(&self, handle: &image::Handle) -> bool {
         self.map.contains_key(&handle.id())
     }
+
+    pub fn print_stats(&self) {
+        println!(
+            "Image cache stats: {} entries, {} hits", 
+            self.map.len(),
+            self.hits.len()
+        );
+        
+        // Count by memory type
+        let host_count = self.map.values()
+            .filter(|mem| matches!(mem, Memory::Host(_)))
+            .count();
+        let device_count = self.map.values()
+            .filter(|mem| matches!(mem, Memory::Device(_)))
+            .count();
+            
+        println!(
+            "Memory locations: {} on host, {} on device",
+            host_count, device_count
+        );
+    }
 }

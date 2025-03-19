@@ -628,3 +628,13 @@ pub fn get_image_upload_timestamps() -> std::collections::VecDeque<std::time::In
 pub fn sync_image_tracker_timestamps(timestamps: std::collections::VecDeque<std::time::Instant>) {
     image::sync_image_tracker_timestamps(timestamps)
 }
+
+/// Get detailed image rendering performance stats
+pub fn get_image_rendering_stats() -> (f64, f64, f64) {
+    if let Ok(tracker) = image::IMAGE_DISPLAY_TRACKER.lock() {
+        let fps = tracker.get_fps();
+        let (avg_upload, avg_render) = tracker.get_timing_stats();
+        return (fps, avg_upload, avg_render);
+    }
+    (0.0, 0.0, 0.0)
+}
