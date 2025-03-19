@@ -316,14 +316,22 @@ impl Atlas {
     pub fn upload_allocation(
         &mut self,
         data: &[u8],
-        image_width: u32,
-        image_height: u32,
+        width: u32,
+        height: u32,
         padding: u32,
         offset: usize,
         allocation: &Allocation,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        // Safety check - ensure the layer exists before uploading
+        let layer = allocation.layer();
+        if layer >= self.layer_count() {
+            log::error!("Cannot upload to layer {} - atlas has only {} layers", 
+                      layer, self.layer_count());
+            return;
+        }
+        
         use wgpu::util::DeviceExt;
 
         let (x, y) = allocation.position();
@@ -348,8 +356,8 @@ impl Atlas {
                 buffer: &buffer,
                 layout: wgpu::ImageDataLayout {
                     offset: offset as u64,
-                    bytes_per_row: Some(4 * image_width + padding),
-                    rows_per_image: Some(image_height),
+                    bytes_per_row: Some(4 * width + padding),
+                    rows_per_image: Some(height),
                 },
             },
             wgpu::ImageCopyTexture {
@@ -503,5 +511,10 @@ impl Atlas {
         if new_layers > 0 {
             self.grow(new_layers, device, encoder);
         }
+    }
+
+    // Add this method to check if an allocation is valid
+    pub fn is_allocation_valid(&self, allocation: &Allocation) -> bool {
+        allocation.layer() < self.layer_count()
     }
 }

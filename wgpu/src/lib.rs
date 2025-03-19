@@ -654,3 +654,10 @@ pub fn get_image_rendering_diagnostics() -> (f64, f64, f64, f64, f64, usize) {
 pub fn log_image_rendering_stats() {
     let _ = image::get_image_rendering_stats_with_logging();
 }
+
+
+/// Display debug information about image upload status
+#[cfg(any(feature = "image", feature = "svg"))]
+pub fn debug_image_upload_status() {
+    image::debug_image_upload_status()
+}

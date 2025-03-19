@@ -907,3 +907,33 @@ pub fn get_image_rendering_stats_with_logging() -> (f64, f64, f64) {
     }
     (0.0, 0.0, 0.0)
 }
+
+// Fix the debug_image_upload_status function to use existing fields
+
+pub fn debug_image_upload_status() {
+    if let Ok(tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        // Use the fields that actually exist in ImageDisplayTracker
+        let uploads_pending = tracker.upload_timestamps.len();
+        let total_frames = tracker.total_frames_rendered;
+        
+        println!("IMAGE UPLOAD STATUS:");
+        println!("  Recent uploads: {}", uploads_pending);
+        println!("  Total frames rendered: {}", total_frames);
+        println!("  Current FPS: {:.2}", tracker.fps);
+        
+        // Get timing statistics
+        let (avg_upload, avg_render) = tracker.get_timing_stats();
+        println!("  Average upload time: {:.2}ms", avg_upload * 1000.0);
+        println!("  Average render time: {:.2}ms", avg_render * 1000.0);
+        println!("  Min render time: {:.2}ms", tracker.min_render_duration.as_secs_f64() * 1000.0);
+        println!("  Max render time: {:.2}ms", tracker.max_render_duration.as_secs_f64() * 1000.0);
+        
+        // Show recent uploads
+        if !tracker.uploaded_images.is_empty() {
+            println!("RECENTLY UPLOADED IMAGES:");
+            for image_identifier in &tracker.uploaded_images {
+                println!("  {}", image_identifier);
+            }
+        }
+    }
+}
