@@ -316,8 +316,8 @@ impl Atlas {
     pub fn upload_allocation(
         &mut self,
         data: &[u8],
-        width: u32,
-        height: u32,
+        image_width: u32,
+        image_height: u32,
         padding: u32,
         offset: usize,
         allocation: &Allocation,
@@ -356,8 +356,8 @@ impl Atlas {
                 buffer: &buffer,
                 layout: wgpu::ImageDataLayout {
                     offset: offset as u64,
-                    bytes_per_row: Some(4 * width + padding),
-                    rows_per_image: Some(height),
+                    bytes_per_row: Some(4 * image_width + padding),
+                    rows_per_image: Some(image_height),
                 },
             },
             wgpu::ImageCopyTexture {
@@ -462,58 +462,20 @@ impl Atlas {
                 }],
             });
     }
-
-    // Get fragmentation metrics
-    pub fn get_fragmentation_stats(&self) -> (usize, usize, f32) {
-        let total_allocations = self.layers.len();
-        let fragmented_count = self.layers.iter()
-            .filter(|layer| matches!(layer, Layer::Busy(_)))
-            .count();
-        
-        let fragmentation_ratio = if total_allocations > 0 {
-            fragmented_count as f32 / total_allocations as f32
-        } else {
-            0.0
-        };
-        
-        (total_allocations, fragmented_count, fragmentation_ratio)
-    }
-
-    // Add method to get allocation from an entry
-    pub fn allocate_entry(
-        &mut self,
-        device: &wgpu::Device,
-        extent: wgpu::Extent3d,
-    ) -> Option<Entry> {
-        let width = extent.width;
-        let height = extent.height;
-        
-        let current_size = self.layers.len();
-        let entry = self.allocate(width, height)?;
-
-        // We grow the internal texture after allocating if necessary
-        let new_layers = self.layers.len() - current_size;
-        
-        if new_layers > 0 {
-            log::debug!("Growing atlas by {} layers", new_layers);
-        }
-        
-        Some(entry)
-    }
     
-    // Separate the grow operation from allocation
+    // Add new method to grow if needed
     pub fn grow_if_needed(
         &mut self,
-        new_layers: usize,
+        amount: usize,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        if new_layers > 0 {
-            self.grow(new_layers, device, encoder);
+        if amount > 0 {
+            self.grow(amount, device, encoder);
         }
     }
 
-    // Add this method to check if an allocation is valid
+    // Add new method to check if an allocation is valid
     pub fn is_allocation_valid(&self, allocation: &Allocation) -> bool {
         allocation.layer() < self.layer_count()
     }
