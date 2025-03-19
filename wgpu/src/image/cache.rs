@@ -68,12 +68,13 @@ impl Cache {
             self.pending_growth = 0;
         }
         
-        // Now process pending uploads
-        let processed = self.staging.process_uploads(&mut self.atlas, device, encoder);
+        // Process pending uploads in parallel
+        let max_parallel = 8; // Process up to 8 uploads in parallel
+        let processed = self.staging.process_uploads_parallel(
+            &mut self.atlas, device, encoder, max_parallel);
         
         if processed > 0 {
-            log::debug!("Processed {} uploads, {} still pending", 
-                      processed, self.staging.pending_count());
+            log::debug!("Processed {} uploads in parallel", processed);
         }
         
         processed

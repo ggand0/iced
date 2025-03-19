@@ -120,4 +120,77 @@ impl StagingBuffer {
     pub fn pending_count(&self) -> usize {
         self.pending_uploads.len()
     }
+
+    pub fn process_uploads_parallel(
+        &mut self,
+        atlas: &mut atlas::Atlas,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        max_parallel: usize,
+    ) -> usize {
+        let start = Instant::now();
+        let mut processed = 0;
+        
+        // Process uploads in parallel batches
+        let batch_size = std::cmp::min(self.pending_uploads.len(), max_parallel);
+        
+        for _ in 0..batch_size {
+            if let Some(upload) = self.pending_uploads.pop_front() {
+                // Check if allocation is valid
+                if upload.allocation.layer() >= atlas.layer_count() {
+                    log::warn!("Skipping upload to invalid layer {}", upload.allocation.layer());
+                    continue;
+                }
+                
+                // Prepare buffer for upload
+                use wgpu::util::DeviceExt;
+                
+                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("parallel image upload buffer"),
+                    contents: &upload.data,
+                    usage: wgpu::BufferUsages::COPY_SRC,
+                });
+                
+                // Get upload parameters
+                let (x, y) = upload.allocation.position();
+                let size = upload.allocation.size();
+                
+                // Execute copy operation immediately
+                encoder.copy_buffer_to_texture(
+                    wgpu::ImageCopyBuffer {
+                        buffer: &buffer,
+                        layout: wgpu::ImageDataLayout {
+                            offset: upload.offset as u64,
+                            bytes_per_row: Some(4 * upload.width + upload.padding),
+                            rows_per_image: Some(upload.height),
+                        },
+                    },
+                    wgpu::ImageCopyTexture {
+                        texture: atlas.texture(),
+                        mip_level: 0,
+                        origin: wgpu::Origin3d {
+                            x,
+                            y,
+                            z: upload.allocation.layer() as u32,
+                        },
+                        aspect: wgpu::TextureAspect::default(),
+                    },
+                    wgpu::Extent3d {
+                        width: size.width,
+                        height: size.height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                
+                processed += 1;
+            }
+        }
+        
+        if processed > 0 {
+            log::debug!("Processed {} uploads in parallel in {:?}", 
+                        processed, start.elapsed());
+        }
+        
+        processed
+    }
 }

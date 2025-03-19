@@ -479,4 +479,9 @@ impl Atlas {
     pub fn is_allocation_valid(&self, allocation: &Allocation) -> bool {
         allocation.layer() < self.layer_count()
     }
+
+    // Add this method to get the texture directly
+    pub fn texture(&self) -> &wgpu::Texture {
+        &self.texture
+    }
 }
