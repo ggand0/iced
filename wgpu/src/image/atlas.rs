@@ -194,7 +194,7 @@ impl Atlas {
         }
     }
 
-    fn allocate(&mut self, width: u32, height: u32) -> Option<Entry> {
+    pub fn allocate(&mut self, width: u32, height: u32) -> Option<Entry> {
         // Allocate one layer if texture fits perfectly
         if width == SIZE && height == SIZE {
             let mut empty_layers = self

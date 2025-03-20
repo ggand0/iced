@@ -27,6 +27,7 @@ webgl = ["wgpu/webgl"]
 [dependencies]
 iced_graphics.workspace = true
 
+image.workspace = true # image crate
 bitflags.workspace = true
 bytemuck.workspace = true
 futures.workspace = true

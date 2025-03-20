@@ -87,25 +87,33 @@ impl Cache {
         encoder: &mut wgpu::CommandEncoder,
         handle: &core::image::Handle,
     ) -> Option<&atlas::Entry> {
-        // Check if pending growth is needed before uploading
+        // First check for the entry - this is safe since it only borrows immutably
+        let entry_exists = self.raster.get_cached_device_entry(handle).is_some();
+        if entry_exists {
+            // Since we know it exists, we can just get it again without borrowing issues
+            return self.raster.get_cached_device_entry(handle);
+        }
+        
+        // Process pending operations before uploading since we need to do an upload
         if self.pending_growth > 0 {
-            log::debug!("Growing atlas by {} layers before raster upload", self.pending_growth);
+            log::debug!("Growing atlas by {} layers", self.pending_growth);
             self.atlas.grow_if_needed(self.pending_growth, device, encoder);
             self.pending_growth = 0;
         }
         
-        // Process any pending uploads first
+        // Process any pending uploads in parallel
         if self.staging.pending_count() > 0 {
-            let processed = self.process_pending_uploads(device, encoder);
+            let max_uploads = 8; // Process up to 8 uploads in parallel
+            let processed = self.staging.process_uploads_parallel(
+                &mut self.atlas, device, encoder, max_uploads);
+            
             if processed > 0 {
-                log::debug!("Processed {} pending uploads before raster upload", processed);
+                log::debug!("Processed {} uploads in parallel", processed);
             }
         }
         
-        // Now do the main upload - this happens last so we can return the entry
-        let entry = self.raster.upload(device, encoder, handle, &mut self.atlas);
-        
-        entry
+        // Now do the upload since we know it doesn't exist
+        self.raster.upload(device, encoder, handle, &mut self.atlas)
     }
 
     #[cfg(feature = "svg")]
