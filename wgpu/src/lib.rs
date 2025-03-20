@@ -630,6 +630,7 @@ pub fn sync_image_tracker_timestamps(timestamps: std::collections::VecDeque<std:
 }
 
 /// Get detailed image rendering performance stats
+#[cfg(any(feature = "image", feature = "svg"))]
 pub fn get_image_rendering_stats() -> (f64, f64, f64) {
     if let Ok(tracker) = image::IMAGE_DISPLAY_TRACKER.lock() {
         let fps = tracker.get_fps();
@@ -640,6 +641,7 @@ pub fn get_image_rendering_stats() -> (f64, f64, f64) {
 }
 
 /// Get comprehensive image rendering diagnostics
+#[cfg(any(feature = "image", feature = "svg"))]
 pub fn get_image_rendering_diagnostics() -> (f64, f64, f64, f64, f64, usize) {
     if let Ok(tracker) = image::IMAGE_DISPLAY_TRACKER.lock() {
         let (fps, avg_upload, avg_render, min_render, max_render) = 
@@ -651,6 +653,7 @@ pub fn get_image_rendering_diagnostics() -> (f64, f64, f64, f64, f64, usize) {
 }
 
 /// Log current image rendering performance stats
+#[cfg(any(feature = "image", feature = "svg"))]
 pub fn log_image_rendering_stats() {
     let _ = image::get_image_rendering_stats_with_logging();
 }
