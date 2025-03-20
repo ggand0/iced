@@ -164,29 +164,29 @@ impl StagingBuffer {
 
     // Submit raw image data for parallel processing
     pub fn submit_for_processing(&mut self, data: Vec<u8>, id: u64) {
+        log::info!("Submitting image {} for parallel processing ({} bytes)", id, data.len());
         self.worker_pool.submit(data, id);
+        self.total_queued += 1;
     }
 
     // Check for processed images and queue them for upload
-    pub fn collect_processed_images(&mut self, atlas: &mut crate::image::atlas::Atlas) -> usize {
+    pub fn collect_processed_images(&mut self, atlas: &mut Atlas) -> usize {
         let processed = self.worker_pool.get_processed();
         let count = processed.len();
         
         if count > 0 {
-            log::debug!("Collected {} processed images from worker threads", count);
+            log::info!("Collected {} processed images from worker threads", count);
         }
         
         for img in processed {
             // Try to allocate in the atlas
             if let Some(entry) = atlas.allocate(img.width, img.height) {
                 // Extract allocation from Entry based on its actual structure
-                // From the Entry enum definition you shared:
                 let allocation = match entry {
                     // If Contiguous, we can directly use the allocation
                     atlas::entry::Entry::Contiguous(allocation) => allocation,
                     
                     // If Fragmented, we need to check if there are fragments and use the first one
-                    // This might not be the right approach for all cases
                     atlas::entry::Entry::Fragmented { fragments, .. } => {
                         if let Some(fragment) = fragments.first() {
                             fragment.allocation.clone()
@@ -312,10 +312,20 @@ impl StagingBuffer {
         let start = Instant::now();
         let mut processed = 0;
         
+        // First, collect any processed images from worker threads
+        let collected = self.collect_processed_images(atlas);
+        if collected > 0 {
+            log::info!("Collected {} processed images from worker threads", collected);
+        }
+        
         // Process uploads in parallel batches
         let batch_size = std::cmp::min(self.pending_uploads.len(), max_parallel);
         
-        for _ in 0..batch_size {
+        if batch_size > 0 {
+            log::info!("Processing {} image uploads in parallel", batch_size);
+        }
+        
+        for i in 0..batch_size {
             if let Some(upload) = self.pending_uploads.pop_front() {
                 // Check if the allocation is valid before processing
                 let allocation_layer = upload.allocation.layer();
@@ -331,7 +341,7 @@ impl StagingBuffer {
                 use wgpu::util::DeviceExt;
                 
                 let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("parallel image upload buffer"),
+                    label: Some(&format!("parallel image upload buffer {}", i)),
                     contents: &upload.data,
                     usage: wgpu::BufferUsages::COPY_SRC,
                 });
@@ -373,7 +383,7 @@ impl StagingBuffer {
         }
         
         if processed > 0 {
-            log::debug!("Processed {} uploads in parallel in {:?}", 
+            log::info!("Processed {} uploads in parallel in {:?}", 
                       processed, start.elapsed());
         }
         
