@@ -650,7 +650,7 @@ pub struct ImageDisplayTracker {
 impl ImageDisplayTracker {
     fn new() -> Self {
         Self {
-            window_duration: Duration::from_secs(5),
+            window_duration: Duration::from_secs(2),
             upload_timestamps: VecDeque::with_capacity(120),
             uploaded_images: HashSet::new(),
             fps: 0.0,
