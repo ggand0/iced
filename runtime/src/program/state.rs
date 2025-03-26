@@ -70,6 +70,21 @@ where
         self.queued_messages.push(message);
     }
 
+    /// Returns the number of messages currently queued in the [`State`].
+    ///
+    /// This can be useful for debugging purposes.
+    pub fn queued_messages_len(&self) -> usize {
+        self.queued_messages.len()
+    }
+
+    /// Clears all currently queued messages in the [`State`].
+    ///
+    /// This can be useful when the message queue becomes overloaded
+    /// with too many messages from successive async operations.
+    pub fn clear_queued_messages(&mut self) {
+        self.queued_messages.clear();
+    }
+
     /// Returns whether the event queue of the [`State`] is empty or not.
     pub fn is_queue_empty(&self) -> bool {
         self.queued_events.is_empty() && self.queued_messages.is_empty()
