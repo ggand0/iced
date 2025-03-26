@@ -75,6 +75,10 @@ impl Cache {
         if let Memory::Host(image) = memory {
             let (width, height) = image.dimensions();
 
+            // [ViewSkater] Track image uploads for image rendering FPS calculation
+            let handle_hash = format!("{:?}", handle.id());            
+            crate::image::record_image_upload(handle_hash, width, height);
+
             let entry = atlas.upload(device, encoder, width, height, image)?;
 
             *memory = Memory::Device(entry);

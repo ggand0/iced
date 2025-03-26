@@ -39,7 +39,7 @@ mod triangle;
 
 #[cfg(any(feature = "image", feature = "svg"))]
 #[path = "image/mod.rs"]
-mod image;
+pub mod image;
 
 #[cfg(not(any(feature = "image", feature = "svg")))]
 #[path = "image/null.rs"]
@@ -607,4 +607,24 @@ impl primitive::Renderer for Renderer {
 
 impl graphics::compositor::Default for crate::Renderer {
     type Compositor = window::Compositor;
+}
+
+/// Get the current image rendering FPS 
+/// This is a global function accessible to applications
+#[allow(dead_code)]
+#[cfg(any(feature = "image", feature = "svg"))]
+pub fn get_image_fps() -> f64 {
+    image::get_image_display_fps()
+}
+
+#[allow(dead_code)]
+#[cfg(any(feature = "image", feature = "svg"))]
+pub fn get_image_upload_timestamps() -> std::collections::VecDeque<std::time::Instant> {
+    image::get_image_upload_timestamps()
+}
+
+#[allow(dead_code)]
+#[cfg(any(feature = "image", feature = "svg"))]
+pub fn sync_image_tracker_timestamps(timestamps: std::collections::VecDeque<std::time::Instant>) {
+    image::sync_image_tracker_timestamps(timestamps)
 }

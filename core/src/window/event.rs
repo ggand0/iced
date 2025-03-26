@@ -2,6 +2,7 @@ use crate::time::Instant;
 use crate::{Point, Size};
 
 use std::path::PathBuf;
+use winit::dpi::PhysicalPosition;
 
 /// A window-related event.
 #[derive(PartialEq, Clone, Debug)]
@@ -46,13 +47,15 @@ pub enum Event {
     ///
     /// When the user hovers multiple files at once, this event will be emitted
     /// for each file separately.
-    FileHovered(PathBuf),
+    //FileHovered(PathBuf),
+    FileHovered(PhysicalPosition<u64>), // should be f64 but a hack
 
     /// A file has been dropped into the window.
     ///
     /// When the user drops multiple files at once, this event will be emitted
     /// for each file separately.
-    FileDropped(PathBuf),
+    //FileDropped(PathBuf),
+    FileDropped(Vec<PathBuf>, PhysicalPosition<u64>),
 
     /// A file was hovered, but has exited the window.
     ///
