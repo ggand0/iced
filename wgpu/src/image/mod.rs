@@ -761,7 +761,7 @@ impl ImageDisplayTracker {
         
         // Log every 50th frame for monitoring
         if self.total_frames_rendered % 50 == 0 {
-            let (avg_upload, avg_render) = self.get_timing_stats();
+            let (_avg_upload, avg_render) = self.get_timing_stats();
             println!("RENDER STATS: Frames: {}, FPS: {:.2}, Avg Render: {:.2}ms, Min: {:.2}ms, Max: {:.2}ms", 
                     self.total_frames_rendered, 
                     self.fps,

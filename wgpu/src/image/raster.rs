@@ -3,7 +3,7 @@ use crate::core::Size;
 use crate::graphics;
 use crate::graphics::image::image_rs;
 use crate::image::atlas::{self, Atlas};
-use image_rs::{ImageBuffer, Rgba};
+use image_rs::Rgba;
 use crate::core::image::Bytes;
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -132,6 +132,7 @@ impl Cache {
         self.entries.contains_key(&handle.id())
     }
 
+    #[allow(dead_code)]
     pub fn print_stats(&self) {
         println!(
             "Image cache stats: {} entries, {} hits", 
@@ -153,59 +154,10 @@ impl Cache {
         );
     }
 
-    // Add methods to access entries by state
-    
     // Get a device entry if it exists
     pub fn get_cached_device_entry(&self, handle: &image::Handle) -> Option<&atlas::Entry> {
         if let Some(Memory::Device(entry)) = self.entries.get(&handle.id()) {
             Some(entry)
-        } else {
-            None
-        }
-    }
-    
-    // Get host memory if it exists
-    pub fn get_cached_host_memory(&self, handle: &image::Handle) -> Option<&image_rs::ImageBuffer<Rgba<u8>, Bytes>> {
-        if let Some(Memory::Host(data)) = self.entries.get(&handle.id()) {
-            Some(data)
-        } else {
-            None
-        }
-    }
-    
-    // Insert a device entry directly
-    pub fn insert_device_entry(&mut self, handle: &image::Handle, entry: atlas::Entry) {
-        let _ = self.entries.insert(handle.id(), Memory::Device(entry));
-    }
-
-    // Check if entry exists in cache (any kind)
-    pub fn has_cache_entry(&self, handle: &image::Handle) -> bool {
-        self.entries.contains_key(&handle.id())
-    }
-    
-    // Check if entry is already on device
-    pub fn has_device_entry(&self, handle: &image::Handle) -> bool {
-        matches!(self.entries.get(&handle.id()), Some(Memory::Device(_)))
-    }
-    
-    // Check if we have host memory
-    pub fn has_host_memory(&self, handle: &image::Handle) -> bool {
-        matches!(self.entries.get(&handle.id()), Some(Memory::Host(_)))
-    }
-    
-    // Get dimensions of an image if available
-    pub fn get_image_dimensions(&self, handle: &image::Handle) -> Option<Size<u32>> {
-        if let Some(Memory::Host(data)) = self.entries.get(&handle.id()) {
-            Some(Size::new(data.width(), data.height()))
-        } else {
-            None
-        }
-    }
-    
-    // Get image bytes if available
-    pub fn get_image_bytes(&self, handle: &image::Handle) -> Option<&[u8]> {
-        if let Some(Memory::Host(data)) = self.entries.get(&handle.id()) {
-            Some(data.as_raw())
         } else {
             None
         }

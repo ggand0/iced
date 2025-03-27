@@ -4,7 +4,6 @@ use crate::image::staging::StagingBuffer;
 
 use std::sync::Arc;
 use std::time::Instant;
-use std::hash::Hash;
 
 #[derive(Debug)]
 pub struct Cache {
@@ -54,31 +53,6 @@ impl Cache {
     #[cfg(feature = "svg")]
     pub fn measure_svg(&mut self, handle: &core::svg::Handle) -> Size<u32> {
         self.vector.load(handle).viewport_dimensions()
-    }
-
-    // Process any pending uploads - call this during the render pass
-    pub fn process_pending_uploads(
-        &mut self,
-        device: &wgpu::Device,
-        encoder: &mut wgpu::CommandEncoder,
-    ) -> usize {
-        // First check if growth is needed
-        if self.pending_growth > 0 {
-            log::debug!("Growing atlas by {} layers before uploads", self.pending_growth);
-            self.atlas.grow_if_needed(self.pending_growth, device, encoder);
-            self.pending_growth = 0;
-        }
-        
-        // Process pending uploads in parallel
-        let max_parallel = 8; // Process up to 8 uploads in parallel
-        let processed = self.staging.process_uploads_parallel(
-            &mut self.atlas, device, encoder, max_parallel);
-        
-        if processed > 0 {
-            log::debug!("Processed {} uploads in parallel", processed);
-        }
-        
-        processed
     }
 
     #[cfg(feature = "image")]
