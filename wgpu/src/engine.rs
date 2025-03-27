@@ -5,6 +5,19 @@ use crate::quad;
 use crate::text;
 use crate::triangle;
 
+#[derive(Debug, Clone)]
+pub struct ImageConfig {
+    pub use_parallel_processing: bool,
+}
+
+impl Default for ImageConfig {
+    fn default() -> Self {
+        Self {
+            use_parallel_processing: true,
+        }
+    }
+}
+
 #[allow(missing_debug_implementations)]
 pub struct Engine {
     pub(crate) staging_belt: wgpu::util::StagingBelt,
@@ -15,6 +28,8 @@ pub struct Engine {
     pub(crate) triangle_pipeline: triangle::Pipeline,
     #[cfg(any(feature = "image", feature = "svg"))]
     pub(crate) image_pipeline: crate::image::Pipeline,
+    #[cfg(any(feature = "image", feature = "svg"))]
+    pub(crate) image_config: ImageConfig,
     pub(crate) primitive_storage: primitive::Storage,
 }
 
@@ -24,7 +39,8 @@ impl Engine {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
-        antialiasing: Option<Antialiasing>, // TODO: Initialize AA pipelines lazily
+        antialiasing: Option<Antialiasing>,
+        image_config: Option<ImageConfig>,
     ) -> Self {
         let backend = _adapter.get_info().backend;
         println!("Using GPU backend: {:?}", backend);
@@ -57,6 +73,9 @@ impl Engine {
 
             #[cfg(any(feature = "image", feature = "svg"))]
             image_pipeline,
+            
+            #[cfg(any(feature = "image", feature = "svg"))]
+            image_config: image_config.unwrap_or_default(),
 
             primitive_storage: primitive::Storage::default(),
         }
@@ -67,7 +86,9 @@ impl Engine {
         &self,
         device: &wgpu::Device,
     ) -> crate::image::Cache {
-        self.image_pipeline.create_cache(device)
+        let mut cache = self.image_pipeline.create_cache(device);
+        cache.set_parallel_processing(self.image_config.use_parallel_processing);
+        cache
     }
 
     pub fn submit(

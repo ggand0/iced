@@ -18,6 +18,9 @@ pub struct Cache {
     
     // Track pending atlas growth to apply on next submission
     pending_growth: usize,
+    
+    // Whether to use parallel processing for image uploads
+    use_parallel_processing: bool,
 }
 
 impl Cache {
@@ -34,6 +37,7 @@ impl Cache {
             vector: crate::image::vector::Cache::default(),
             staging: StagingBuffer::new(),
             pending_growth: 0,
+            use_parallel_processing: true,
         }
     }
 
@@ -57,6 +61,16 @@ impl Cache {
 
     #[cfg(feature = "image")]
     pub fn upload_raster(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        handle: &core::image::Handle,
+    ) -> Option<&atlas::Entry> {
+        self.raster.upload(device, encoder, handle, &mut self.atlas)
+    }
+
+    #[cfg(feature = "image")]
+    pub fn upload_raster_parallel(
         &mut self,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
@@ -171,9 +185,30 @@ impl Cache {
         self.vector.trim(&mut self.atlas);
     }
 
-    // Add debug information
+    // Debug information
     pub fn log_state(&self) {
         log::debug!("Cache state: Atlas has {} layers, {} pending uploads", 
                   self.atlas.layer_count(), self.staging.pending_count());
+    }
+
+    // Setter for use_parallel_processing
+    pub fn set_parallel_processing(&mut self, enabled: bool) {
+        self.use_parallel_processing = enabled;
+    }
+    
+    // A wrapper for upload raster methods, called by Pipeline::prepare
+    pub fn upload(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        handle: &core::image::Handle,
+    ) -> Option<&atlas::Entry> {
+        if self.use_parallel_processing {
+            log::debug!("Using parallel processing for image upload");
+            self.upload_raster_parallel(device, encoder, handle)
+        } else {
+            log::debug!("Using synchronous processing for image upload");
+            self.upload_raster(device, encoder, handle)
+        }
     }
 }

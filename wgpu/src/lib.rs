@@ -32,7 +32,7 @@ pub mod geometry;
 
 mod buffer;
 mod color;
-mod engine;
+pub mod engine;
 mod quad;
 mod text;
 mod triangle;

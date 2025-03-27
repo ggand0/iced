@@ -228,7 +228,8 @@ impl Pipeline {
                 #[cfg(feature = "image")]
                 Image::Raster(image, bounds) => {
                     if let Some(atlas_entry) =
-                        cache.upload_raster(device, encoder, &image.handle)
+                        //cache.upload_raster(device, encoder, &image.handle)
+                        cache.upload(device, encoder, &image.handle)
                     {
                         add_instances(
                             [bounds.x, bounds.y],
