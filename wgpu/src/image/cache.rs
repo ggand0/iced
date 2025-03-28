@@ -21,6 +21,9 @@ pub struct Cache {
     
     // Whether to use parallel processing for image uploads
     use_parallel_processing: bool,
+
+    // Atlas size
+    atlas_size: u32,
 }
 
 impl Cache {
@@ -28,9 +31,10 @@ impl Cache {
         device: &wgpu::Device,
         backend: wgpu::Backend,
         layout: Arc<wgpu::BindGroupLayout>,
+        atlas_size: u32,
     ) -> Self {
         Self {
-            atlas: Atlas::new(device, backend, layout),
+            atlas: Atlas::new(device, backend, layout, atlas_size),
             #[cfg(feature = "image")]
             raster: crate::image::raster::Cache::default(),
             #[cfg(feature = "svg")]
@@ -38,7 +42,12 @@ impl Cache {
             staging: StagingBuffer::new(),
             pending_growth: 0,
             use_parallel_processing: true,
+            atlas_size: atlas_size,
         }
+    }
+
+    pub fn atlas_size(&self) -> u32 {
+        self.atlas_size
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
@@ -51,7 +60,7 @@ impl Cache {
 
     #[cfg(feature = "image")]
     pub fn measure_image(&mut self, handle: &core::image::Handle) -> Size<u32> {
-        self.raster.load(handle).dimensions()
+        self.raster.load(handle).dimensions(self.atlas_size)
     }
 
     #[cfg(feature = "svg")]

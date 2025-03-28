@@ -267,7 +267,7 @@ impl StagingBuffer {
                 
                 // Get upload parameters
                 let (x, y) = upload.allocation.position();
-                let size = upload.allocation.size();
+                let size = upload.allocation.size(atlas.size());
                 
                 // Execute copy operation
                 encoder.copy_buffer_to_texture(

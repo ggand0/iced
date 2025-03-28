@@ -23,14 +23,14 @@ pub enum Memory {
 
 impl Memory {
     /// Width and height of image
-    pub fn dimensions(&self) -> Size<u32> {
+    pub fn dimensions(&self, atlas_size: u32) -> Size<u32> {
         match self {
             Memory::Host(image) => {
                 let (width, height) = image.dimensions();
 
                 Size::new(width, height)
             }
-            Memory::Device(entry) => entry.size(),
+            Memory::Device(entry) => entry.size(atlas_size),
             Memory::NotFound => Size::new(1, 1),
             Memory::Invalid => Size::new(1, 1),
         }

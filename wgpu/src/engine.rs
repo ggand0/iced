@@ -8,12 +8,14 @@ use crate::triangle;
 #[derive(Debug, Clone)]
 pub struct ImageConfig {
     pub use_parallel_processing: bool,
+    pub atlas_size: u32,
 }
 
 impl Default for ImageConfig {
     fn default() -> Self {
         Self {
             use_parallel_processing: true,
+            atlas_size: crate::image::atlas::DEFAULT_SIZE,
         }
     }
 }
@@ -86,7 +88,7 @@ impl Engine {
         &self,
         device: &wgpu::Device,
     ) -> crate::image::Cache {
-        let mut cache = self.image_pipeline.create_cache(device);
+        let mut cache = self.image_pipeline.create_cache(device, self.image_config.atlas_size);
         cache.set_parallel_processing(self.image_config.use_parallel_processing);
         cache
     }

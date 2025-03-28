@@ -1,7 +1,7 @@
 pub(crate) mod cache;
 pub(crate) use cache::Cache;
 
-mod atlas;
+pub mod atlas;
 mod staging;
 
 #[cfg(feature = "image")]
@@ -206,8 +206,13 @@ impl Pipeline {
         }
     }
 
-    pub fn create_cache(&self, device: &wgpu::Device) -> Cache {
-        Cache::new(device, self.backend, self.texture_layout.clone())
+    pub fn create_cache(&self, device: &wgpu::Device, atlas_size: u32) -> Cache {
+        Cache::new(
+            device,
+            self.backend,
+            self.texture_layout.clone(),
+            atlas_size,
+        )
     }
 
     pub fn prepare(
@@ -222,6 +227,7 @@ impl Pipeline {
     ) {
         let nearest_instances: &mut Vec<Instance> = &mut Vec::new();
         let linear_instances: &mut Vec<Instance> = &mut Vec::new();
+        let atlas_size = cache.atlas_size();
 
         for image in images {
             match &image {
@@ -238,6 +244,7 @@ impl Pipeline {
                             image.opacity,
                             image.snap,
                             atlas_entry,
+                            atlas_size,
                             match image.filter_method {
                                 crate::core::image::FilterMethod::Nearest => {
                                     nearest_instances
@@ -271,6 +278,7 @@ impl Pipeline {
                             svg.opacity,
                             true,
                             atlas_entry,
+                            atlas_size,
                             nearest_instances,
                         );
                     }
@@ -529,6 +537,7 @@ fn add_instances(
     opacity: f32,
     snap: bool,
     entry: &atlas::Entry,
+    atlas_size: u32,
     instances: &mut Vec<Instance>,
 ) {
     let center = [
@@ -546,6 +555,7 @@ fn add_instances(
                 opacity,
                 snap,
                 allocation,
+                atlas_size,
                 instances,
             );
         }
@@ -561,7 +571,7 @@ fn add_instances(
                 let Size {
                     width: fragment_width,
                     height: fragment_height,
-                } = allocation.size();
+                } = allocation.size(atlas_size);
 
                 let position = [
                     x + fragment_x as f32 * scaling_x,
@@ -575,7 +585,7 @@ fn add_instances(
 
                 add_instance(
                     position, center, size, rotation, opacity, snap,
-                    allocation, instances,
+                    allocation, atlas_size, instances,
                 );
             }
         }
@@ -591,10 +601,11 @@ fn add_instance(
     opacity: f32,
     snap: bool,
     allocation: &atlas::Allocation,
+    atlas_size: u32,
     instances: &mut Vec<Instance>,
 ) {
     let (x, y) = allocation.position();
-    let Size { width, height } = allocation.size();
+    let Size { width, height } = allocation.size(atlas_size);
     let layer = allocation.layer();
 
     let instance = Instance {
@@ -604,12 +615,12 @@ fn add_instance(
         _rotation: rotation,
         _opacity: opacity,
         _position_in_atlas: [
-            (x as f32 + 0.5) / atlas::SIZE as f32,
-            (y as f32 + 0.5) / atlas::SIZE as f32,
+            (x as f32 + 0.5) / atlas_size as f32,
+            (y as f32 + 0.5) / atlas_size as f32,
         ],
         _size_in_atlas: [
-            (width as f32 - 1.0) / atlas::SIZE as f32,
-            (height as f32 - 1.0) / atlas::SIZE as f32,
+            (width as f32 - 1.0) / atlas_size as f32,
+            (height as f32 - 1.0) / atlas_size as f32,
         ],
         _layer: layer as u32,
         _snap: snap as u32,

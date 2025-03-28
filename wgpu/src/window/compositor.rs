@@ -175,9 +175,7 @@ impl Compositor {
                         &queue,
                         format,
                         settings.antialiasing,
-                        Some(ImageConfig {
-                            use_parallel_processing: false,
-                        }),
+                        Some(ImageConfig::default()),
                     );
 
                     return Ok(Compositor {
