@@ -2,6 +2,7 @@ pub(crate) mod cache;
 pub(crate) use cache::Cache;
 
 pub mod atlas;
+
 mod staging;
 
 #[cfg(feature = "image")]

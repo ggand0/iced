@@ -38,6 +38,7 @@ pub struct Engine {
 }
 
 impl Engine {
+    #[allow(unused_variables)]
     pub fn new(
         _adapter: &wgpu::Adapter,
         device: &wgpu::Device,
@@ -100,6 +101,7 @@ impl Engine {
         queue: &wgpu::Queue,
         encoder: wgpu::CommandEncoder,
     ) -> wgpu::SubmissionIndex {
+        #[cfg(any(feature = "image", feature = "svg"))]
         let render_start = std::time::Instant::now();
         
         self.staging_belt.finish();
