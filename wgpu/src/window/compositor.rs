@@ -169,6 +169,7 @@ impl Compositor {
 
             match result {
                 Ok((device, queue)) => {
+                    #[cfg(feature = "image")]
                     let engine = Engine::new(
                         &adapter,
                         &device,
@@ -176,6 +177,15 @@ impl Compositor {
                         format,
                         settings.antialiasing,
                         Some(ImageConfig::default()),
+                    );
+                    #[cfg(not(feature = "image"))]
+                    let engine = Engine::new(
+                        &adapter,
+                        &device,
+                        &queue,
+                        format,
+                        settings.antialiasing,
+                        None,
                     );
 
                     return Ok(Compositor {

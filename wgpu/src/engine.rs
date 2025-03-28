@@ -5,7 +5,6 @@ use crate::quad;
 use crate::text;
 use crate::triangle;
 
-pub const DEFAULT_ATLAS_SIZE: u32 = 2048;
 
 #[derive(Debug, Clone)]
 pub struct ImageConfig {
@@ -13,11 +12,12 @@ pub struct ImageConfig {
     pub atlas_size: u32,
 }
 
+#[cfg(feature = "image")]
 impl Default for ImageConfig {
     fn default() -> Self {
         Self {
             use_parallel_processing: true,
-            atlas_size: DEFAULT_ATLAS_SIZE,
+            atlas_size: crate::image::atlas::DEFAULT_SIZE,
         }
     }
 }

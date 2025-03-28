@@ -10,7 +10,7 @@ pub use layer::Layer;
 
 use allocator::Allocator;
 
-//pub const SIZE: u32 = 2048;
+pub const DEFAULT_SIZE: u32 = 2048;
 
 use crate::core::Size;
 use crate::graphics::color;
