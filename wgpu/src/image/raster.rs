@@ -3,6 +3,8 @@ use crate::core::Size;
 use crate::graphics;
 use crate::graphics::image::image_rs;
 use crate::image::atlas::{self, Atlas};
+use image_rs::Rgba;
+use crate::core::image::Bytes;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -10,7 +12,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 #[derive(Debug)]
 pub enum Memory {
     /// Image data on host
-    Host(image_rs::ImageBuffer<image_rs::Rgba<u8>, image::Bytes>),
+    Host(image_rs::ImageBuffer<Rgba<u8>, Bytes>),
     /// Storage entry
     Device(atlas::Entry),
     /// Image not found
@@ -21,14 +23,14 @@ pub enum Memory {
 
 impl Memory {
     /// Width and height of image
-    pub fn dimensions(&self) -> Size<u32> {
+    pub fn dimensions(&self, atlas_size: u32) -> Size<u32> {
         match self {
             Memory::Host(image) => {
                 let (width, height) = image.dimensions();
 
                 Size::new(width, height)
             }
-            Memory::Device(entry) => entry.size(),
+            Memory::Device(entry) => entry.size(atlas_size),
             Memory::NotFound => Size::new(1, 1),
             Memory::Invalid => Size::new(1, 1),
         }
@@ -38,7 +40,7 @@ impl Memory {
 /// Caches image raster data
 #[derive(Debug, Default)]
 pub struct Cache {
-    map: FxHashMap<image::Id, Memory>,
+    entries: FxHashMap<image::Id, Memory>,
     hits: FxHashSet<image::Id>,
     should_trim: bool,
 }
@@ -100,7 +102,7 @@ impl Cache {
 
         let hits = &self.hits;
 
-        self.map.retain(|k, memory| {
+        self.entries.retain(|k, memory| {
             let retain = hits.contains(k);
 
             if !retain {
@@ -119,14 +121,45 @@ impl Cache {
     fn get(&mut self, handle: &image::Handle) -> Option<&mut Memory> {
         let _ = self.hits.insert(handle.id());
 
-        self.map.get_mut(&handle.id())
+        self.entries.get_mut(&handle.id())
     }
 
     fn insert(&mut self, handle: &image::Handle, memory: Memory) {
-        let _ = self.map.insert(handle.id(), memory);
+        let _ = self.entries.insert(handle.id(), memory);
     }
 
     fn contains(&self, handle: &image::Handle) -> bool {
-        self.map.contains_key(&handle.id())
+        self.entries.contains_key(&handle.id())
+    }
+
+    #[allow(dead_code)]
+    pub fn print_stats(&self) {
+        println!(
+            "Image cache stats: {} entries, {} hits", 
+            self.entries.len(),
+            self.hits.len()
+        );
+        
+        // Count by memory type
+        let host_count = self.entries.values()
+            .filter(|mem| matches!(mem, Memory::Host(_)))
+            .count();
+        let device_count = self.entries.values()
+            .filter(|mem| matches!(mem, Memory::Device(_)))
+            .count();
+            
+        println!(
+            "Memory locations: {} on host, {} on device",
+            host_count, device_count
+        );
+    }
+
+    // Get a device entry if it exists
+    pub fn get_cached_device_entry(&self, handle: &image::Handle) -> Option<&atlas::Entry> {
+        if let Some(Memory::Device(entry)) = self.entries.get(&handle.id()) {
+            Some(entry)
+        } else {
+            None
+        }
     }
 }
