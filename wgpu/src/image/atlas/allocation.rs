@@ -1,7 +1,7 @@
 use crate::core::Size;
-use crate::image::atlas::allocator;
+use crate::image::atlas::{self, allocator};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Allocation {
     Partial {
         layer: usize,
@@ -20,10 +20,10 @@ impl Allocation {
         }
     }
 
-    pub fn size(&self, atlas_size: u32) -> Size<u32> {
+    pub fn size(&self) -> Size<u32> {
         match self {
             Allocation::Partial { region, .. } => region.size(),
-            Allocation::Full { .. } => Size::new(atlas_size, atlas_size),
+            Allocation::Full { .. } => Size::new(atlas::SIZE, atlas::SIZE),
         }
     }
 

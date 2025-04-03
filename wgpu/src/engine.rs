@@ -5,23 +5,6 @@ use crate::quad;
 use crate::text;
 use crate::triangle;
 
-
-#[derive(Debug, Clone)]
-pub struct ImageConfig {
-    pub use_parallel_processing: bool,
-    pub atlas_size: u32,
-}
-
-#[cfg(feature = "image")]
-impl Default for ImageConfig {
-    fn default() -> Self {
-        Self {
-            use_parallel_processing: true,
-            atlas_size: crate::image::atlas::DEFAULT_SIZE,
-        }
-    }
-}
-
 #[allow(missing_debug_implementations)]
 pub struct Engine {
     pub(crate) staging_belt: wgpu::util::StagingBelt,
@@ -32,24 +15,17 @@ pub struct Engine {
     pub(crate) triangle_pipeline: triangle::Pipeline,
     #[cfg(any(feature = "image", feature = "svg"))]
     pub(crate) image_pipeline: crate::image::Pipeline,
-    #[cfg(any(feature = "image", feature = "svg"))]
-    pub(crate) image_config: ImageConfig,
     pub(crate) primitive_storage: primitive::Storage,
 }
 
 impl Engine {
-    #[allow(unused_variables)]
     pub fn new(
         _adapter: &wgpu::Adapter,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
-        antialiasing: Option<Antialiasing>,
-        image_config: Option<ImageConfig>,
+        antialiasing: Option<Antialiasing>, // TODO: Initialize AA pipelines lazily
     ) -> Self {
-        let backend = _adapter.get_info().backend;
-        println!("Using GPU backend: {:?}", backend);
-        
         let text_pipeline = text::Pipeline::new(device, queue, format);
         let quad_pipeline = quad::Pipeline::new(device, format);
         let triangle_pipeline =
@@ -63,12 +39,11 @@ impl Engine {
         };
 
         Self {
+            // TODO: Resize belt smartly (?)
+            // It would be great if the `StagingBelt` API exposed methods
+            // for introspection to detect when a resize may be worth it.
             staging_belt: wgpu::util::StagingBelt::new(
-                if cfg!(target_os = "linux") {
-                    buffer::MAX_WRITE_SIZE as u64 * 4 // Larger for Linux
-                } else {
-                    buffer::MAX_WRITE_SIZE as u64     // Normal size for other platforms
-                }
+                buffer::MAX_WRITE_SIZE as u64,
             ),
             format,
 
@@ -78,9 +53,6 @@ impl Engine {
 
             #[cfg(any(feature = "image", feature = "svg"))]
             image_pipeline,
-            
-            #[cfg(any(feature = "image", feature = "svg"))]
-            image_config: image_config.unwrap_or_default(),
 
             primitive_storage: primitive::Storage::default(),
         }
@@ -91,9 +63,7 @@ impl Engine {
         &self,
         device: &wgpu::Device,
     ) -> crate::image::Cache {
-        let mut cache = self.image_pipeline.create_cache(device, self.image_config.atlas_size);
-        cache.set_parallel_processing(self.image_config.use_parallel_processing);
-        cache
+        self.image_pipeline.create_cache(device)
     }
 
     pub fn submit(
@@ -101,9 +71,6 @@ impl Engine {
         queue: &wgpu::Queue,
         encoder: wgpu::CommandEncoder,
     ) -> wgpu::SubmissionIndex {
-        #[cfg(any(feature = "image", feature = "svg"))]
-        let render_start = std::time::Instant::now();
-        
         self.staging_belt.finish();
         let index = queue.submit(Some(encoder.finish()));
         self.staging_belt.recall();
@@ -113,15 +80,7 @@ impl Engine {
         self.triangle_pipeline.end_frame();
 
         #[cfg(any(feature = "image", feature = "svg"))]
-        {
-            // Record render time
-            let render_duration = render_start.elapsed();
-            if render_duration.as_millis() > 30 {
-                println!("SLOW GPU SUBMIT: {:.2}ms", render_duration.as_secs_f64() * 1000.0);
-            }
-            crate::image::record_image_render_duration(render_duration);
-            self.image_pipeline.end_frame();
-        }
+        self.image_pipeline.end_frame();
 
         index
     }
