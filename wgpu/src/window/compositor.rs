@@ -7,9 +7,6 @@ use crate::graphics::{self, Viewport};
 use crate::settings::{self, Settings};
 use crate::{Engine, Renderer};
 
-#[cfg(feature = "image")]
-use crate::engine::ImageConfig;
-
 /// A window graphics backend for iced powered by `wgpu`.
 #[allow(missing_debug_implementations)]
 pub struct Compositor {
@@ -172,23 +169,12 @@ impl Compositor {
 
             match result {
                 Ok((device, queue)) => {
-                    #[cfg(feature = "image")]
                     let engine = Engine::new(
                         &adapter,
                         &device,
                         &queue,
                         format,
                         settings.antialiasing,
-                        Some(ImageConfig::default()),
-                    );
-                    #[cfg(not(feature = "image"))]
-                    let engine = Engine::new(
-                        &adapter,
-                        &device,
-                        &queue,
-                        format,
-                        settings.antialiasing,
-                        None,
                     );
 
                     return Ok(Compositor {

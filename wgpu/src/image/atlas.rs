@@ -10,7 +10,7 @@ pub use layer::Layer;
 
 use allocator::Allocator;
 
-pub const DEFAULT_SIZE: u32 = 2048;
+pub const SIZE: u32 = 2048;
 
 use crate::core::Size;
 use crate::graphics::color;
@@ -24,7 +24,6 @@ pub struct Atlas {
     texture_bind_group: wgpu::BindGroup,
     texture_layout: Arc<wgpu::BindGroupLayout>,
     layers: Vec<Layer>,
-    size: u32,
 }
 
 impl Atlas {
@@ -32,10 +31,7 @@ impl Atlas {
         device: &wgpu::Device,
         backend: wgpu::Backend,
         texture_layout: Arc<wgpu::BindGroupLayout>,
-        size: u32,
     ) -> Self {
-        let size = if size == 0 { DEFAULT_SIZE } else { size };
-        
         let layers = match backend {
             // On the GL backend we start with 2 layers, to help wgpu figure
             // out that this texture is `GL_TEXTURE_2D_ARRAY` rather than `GL_TEXTURE_2D`
@@ -45,8 +41,8 @@ impl Atlas {
         };
 
         let extent = wgpu::Extent3d {
-            width: size,
-            height: size,
+            width: SIZE,
+            height: SIZE,
             depth_or_array_layers: layers.len() as u32,
         };
 
@@ -88,7 +84,6 @@ impl Atlas {
             texture_bind_group,
             texture_layout,
             layers,
-            size,
         }
     }
 
@@ -199,9 +194,9 @@ impl Atlas {
         }
     }
 
-    pub fn allocate(&mut self, width: u32, height: u32) -> Option<Entry> {
+    fn allocate(&mut self, width: u32, height: u32) -> Option<Entry> {
         // Allocate one layer if texture fits perfectly
-        if width == self.size && height == self.size {
+        if width == SIZE && height == SIZE {
             let mut empty_layers = self
                 .layers
                 .iter_mut()
@@ -222,16 +217,16 @@ impl Atlas {
         }
 
         // Split big textures across multiple layers
-        if width > self.size || height > self.size {
+        if width > SIZE || height > SIZE {
             let mut fragments = Vec::new();
             let mut y = 0;
 
             while y < height {
-                let height = std::cmp::min(height - y, self.size);
+                let height = std::cmp::min(height - y, SIZE);
                 let mut x = 0;
 
                 while x < width {
-                    let width = std::cmp::min(width - x, self.size);
+                    let width = std::cmp::min(width - x, SIZE);
 
                     let allocation = self.allocate(width, height)?;
 
@@ -258,7 +253,7 @@ impl Atlas {
         for (i, layer) in self.layers.iter_mut().enumerate() {
             match layer {
                 Layer::Empty => {
-                    let mut allocator = Allocator::new(self.size);
+                    let mut allocator = Allocator::new(SIZE);
 
                     if let Some(region) = allocator.allocate(width, height) {
                         *layer = Layer::Busy(allocator);
@@ -282,7 +277,7 @@ impl Atlas {
         }
 
         // Create new layer with atlas allocator
-        let mut allocator = Allocator::new(self.size);
+        let mut allocator = Allocator::new(SIZE);
 
         if let Some(region) = allocator.allocate(width, height) {
             self.layers.push(Layer::Busy(allocator));
@@ -318,7 +313,7 @@ impl Atlas {
         }
     }
 
-    pub fn upload_allocation(
+    fn upload_allocation(
         &mut self,
         data: &[u8],
         image_width: u32,
@@ -329,19 +324,10 @@ impl Atlas {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        // Safety check - ensure the layer exists before uploading
-        let layer = allocation.layer();
-        if layer >= self.layer_count() {
-            log::error!("Cannot upload to layer {} - atlas has only {} layers", 
-                      layer, self.layer_count());
-            return;
-        }
-        
         use wgpu::util::DeviceExt;
 
         let (x, y) = allocation.position();
-        //let Size { width, height } = allocation.size();
-        let Size { width, height } = allocation.size(self.size);
+        let Size { width, height } = allocation.size();
         let layer = allocation.layer();
 
         let extent = wgpu::Extent3d {
@@ -393,8 +379,8 @@ impl Atlas {
         let new_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("iced_wgpu::image texture atlas"),
             size: wgpu::Extent3d {
-                width: self.size,
-                height: self.size,
+                width: SIZE,
+                height: SIZE,
                 depth_or_array_layers: self.layers.len() as u32,
             },
             mip_level_count: 1,
@@ -442,8 +428,8 @@ impl Atlas {
                     aspect: wgpu::TextureAspect::default(),
                 },
                 wgpu::Extent3d {
-                    width: self.size,
-                    height: self.size,
+                    width: SIZE,
+                    height: SIZE,
                     depth_or_array_layers: 1,
                 },
             );
@@ -467,26 +453,5 @@ impl Atlas {
                     ),
                 }],
             });
-    }
-    
-    // Add new method to grow if needed
-    pub fn grow_if_needed(
-        &mut self,
-        amount: usize,
-        device: &wgpu::Device,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        if amount > 0 {
-            self.grow(amount, device, encoder);
-        }
-    }
-
-    // Add this method to get the texture directly
-    pub fn texture(&self) -> &wgpu::Texture {
-        &self.texture
-    }
-
-    pub fn size(&self) -> u32 {
-        self.size
     }
 }

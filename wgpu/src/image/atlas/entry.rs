@@ -12,9 +12,9 @@ pub enum Entry {
 
 impl Entry {
     #[cfg(feature = "image")]
-    pub fn size(&self, atlas_size: u32) -> Size<u32> {
+    pub fn size(&self) -> Size<u32> {
         match self {
-            Entry::Contiguous(allocation) => allocation.size(atlas_size),
+            Entry::Contiguous(allocation) => allocation.size(),
             Entry::Fragmented { size, .. } => *size,
         }
     }

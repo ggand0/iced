@@ -1,9 +1,7 @@
 pub(crate) mod cache;
 pub(crate) use cache::Cache;
 
-pub mod atlas;
-
-mod staging;
+mod atlas;
 
 #[cfg(feature = "image")]
 mod raster;
@@ -207,13 +205,8 @@ impl Pipeline {
         }
     }
 
-    pub fn create_cache(&self, device: &wgpu::Device, atlas_size: u32) -> Cache {
-        Cache::new(
-            device,
-            self.backend,
-            self.texture_layout.clone(),
-            atlas_size,
-        )
+    pub fn create_cache(&self, device: &wgpu::Device) -> Cache {
+        Cache::new(device, self.backend, self.texture_layout.clone())
     }
 
     pub fn prepare(
@@ -228,15 +221,13 @@ impl Pipeline {
     ) {
         let nearest_instances: &mut Vec<Instance> = &mut Vec::new();
         let linear_instances: &mut Vec<Instance> = &mut Vec::new();
-        let atlas_size = cache.atlas_size();
 
         for image in images {
             match &image {
                 #[cfg(feature = "image")]
                 Image::Raster(image, bounds) => {
                     if let Some(atlas_entry) =
-                        //cache.upload_raster(device, encoder, &image.handle)
-                        cache.upload(device, encoder, &image.handle)
+                        cache.upload_raster(device, encoder, &image.handle)
                     {
                         add_instances(
                             [bounds.x, bounds.y],
@@ -245,7 +236,6 @@ impl Pipeline {
                             image.opacity,
                             image.snap,
                             atlas_entry,
-                            atlas_size,
                             match image.filter_method {
                                 crate::core::image::FilterMethod::Nearest => {
                                     nearest_instances
@@ -279,7 +269,6 @@ impl Pipeline {
                             svg.opacity,
                             true,
                             atlas_entry,
-                            atlas_size,
                             nearest_instances,
                         );
                     }
@@ -324,8 +313,6 @@ impl Pipeline {
         bounds: Rectangle<u32>,
         render_pass: &mut wgpu::RenderPass<'a>,
     ) {
-        let render_start = Instant::now();
-        
         if let Some(layer) = self.layers.get(layer) {
             render_pass.set_pipeline(&self.pipeline);
 
@@ -339,11 +326,6 @@ impl Pipeline {
             render_pass.set_bind_group(1, cache.bind_group(), &[]);
 
             layer.render(render_pass);
-        }
-        
-        // Record render duration
-        if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
-            tracker.record_render_duration(render_start.elapsed());
         }
     }
 
@@ -538,7 +520,6 @@ fn add_instances(
     opacity: f32,
     snap: bool,
     entry: &atlas::Entry,
-    atlas_size: u32,
     instances: &mut Vec<Instance>,
 ) {
     let center = [
@@ -556,7 +537,6 @@ fn add_instances(
                 opacity,
                 snap,
                 allocation,
-                atlas_size,
                 instances,
             );
         }
@@ -572,7 +552,7 @@ fn add_instances(
                 let Size {
                     width: fragment_width,
                     height: fragment_height,
-                } = allocation.size(atlas_size);
+                } = allocation.size();
 
                 let position = [
                     x + fragment_x as f32 * scaling_x,
@@ -586,7 +566,7 @@ fn add_instances(
 
                 add_instance(
                     position, center, size, rotation, opacity, snap,
-                    allocation, atlas_size, instances,
+                    allocation, instances,
                 );
             }
         }
@@ -602,11 +582,10 @@ fn add_instance(
     opacity: f32,
     snap: bool,
     allocation: &atlas::Allocation,
-    atlas_size: u32,
     instances: &mut Vec<Instance>,
 ) {
     let (x, y) = allocation.position();
-    let Size { width, height } = allocation.size(atlas_size);
+    let Size { width, height } = allocation.size();
     let layer = allocation.layer();
 
     let instance = Instance {
@@ -616,12 +595,12 @@ fn add_instance(
         _rotation: rotation,
         _opacity: opacity,
         _position_in_atlas: [
-            (x as f32 + 0.5) / atlas_size as f32,
-            (y as f32 + 0.5) / atlas_size as f32,
+            (x as f32 + 0.5) / atlas::SIZE as f32,
+            (y as f32 + 0.5) / atlas::SIZE as f32,
         ],
         _size_in_atlas: [
-            (width as f32 - 1.0) / atlas_size as f32,
-            (height as f32 - 1.0) / atlas_size as f32,
+            (width as f32 - 1.0) / atlas::SIZE as f32,
+            (height as f32 - 1.0) / atlas::SIZE as f32,
         ],
         _layer: layer as u32,
         _snap: snap as u32,
@@ -649,31 +628,15 @@ pub struct ImageDisplayTracker {
     
     // Calculated FPS value
     fps: f64,
-    
-    // Add new timing fields and stats
-    upload_durations: VecDeque<Duration>,
-    render_durations: VecDeque<Duration>,
-    current_upload_start: Option<Instant>,
-    current_render_start: Option<Instant>,
-    max_render_duration: Duration,
-    min_render_duration: Duration,
-    pub total_frames_rendered: usize,
 }
 
 impl ImageDisplayTracker {
     fn new() -> Self {
         Self {
-            window_duration: Duration::from_secs(2),
+            window_duration: Duration::from_secs(5),
             upload_timestamps: VecDeque::with_capacity(120),
             uploaded_images: HashSet::new(),
             fps: 0.0,
-            upload_durations: VecDeque::with_capacity(100),
-            render_durations: VecDeque::with_capacity(100),
-            current_upload_start: None,
-            current_render_start: None,
-            max_render_duration: Duration::from_millis(0),
-            min_render_duration: Duration::from_secs(1000),
-            total_frames_rendered: 0,
         }
     }
     
@@ -690,9 +653,6 @@ impl ImageDisplayTracker {
         
         // Calculate FPS
         self.calculate_fps();
-        
-        // Start timing the upload process
-        self.current_upload_start = Some(Instant::now());
     }
     
     /// Calculate FPS from upload timestamps
@@ -742,124 +702,6 @@ impl ImageDisplayTracker {
             self.calculate_fps();
         }
     }
-
-    // Fix the upload_durations trimming
-    pub fn record_upload_complete(&mut self) {
-        if let Some(start) = self.current_upload_start.take() {
-            let duration = start.elapsed();
-            self.upload_durations.push_back(duration);
-            
-            // Trim old entries - use let _ = to explicitly discard the result
-            while self.upload_durations.len() > 100 {
-                let _ = self.upload_durations.pop_front();
-            }
-        }
-    }
-
-    // Update record_render_duration to log outliers
-    pub fn record_render_duration(&mut self, duration: Duration) {
-        self.render_durations.push_back(duration);
-        
-        self.total_frames_rendered += 1;
-        
-        // Track min/max for outlier detection
-        if duration > self.max_render_duration {
-            self.max_render_duration = duration;
-            println!("SLOW FRAME DETECTED: {:.2}ms", duration.as_secs_f64() * 1000.0);
-        }
-        
-        if duration < self.min_render_duration {
-            self.min_render_duration = duration;
-        }
-        
-        // Log every 50th frame for monitoring
-        if self.total_frames_rendered % 50 == 0 {
-            let (_avg_upload, avg_render) = self.get_timing_stats();
-            println!("RENDER STATS: Frames: {}, FPS: {:.2}, Avg Render: {:.2}ms, Min: {:.2}ms, Max: {:.2}ms", 
-                    self.total_frames_rendered, 
-                    self.fps,
-                    avg_render * 1000.0,
-                    self.min_render_duration.as_secs_f64() * 1000.0,
-                    self.max_render_duration.as_secs_f64() * 1000.0);
-        }
-        
-        while self.render_durations.len() > 100 {
-            let _ = self.render_durations.pop_front();
-        }
-    }
-
-    // Start timing a render operation
-    pub fn start_render_timing(&mut self) {
-        self.current_render_start = Some(Instant::now());
-    }
-    
-    // Complete timing a render operation
-    pub fn complete_render_timing(&mut self) {
-        if let Some(start) = self.current_render_start.take() {
-            let duration = start.elapsed();
-            self.record_render_duration(duration);
-        }
-    }
-    
-    // Enhanced method to get timing stats with more details
-    pub fn get_detailed_timing_stats(&self) -> (f64, f64, f64, f64, f64) {
-        let (avg_upload, avg_render) = self.get_timing_stats();
-        
-        let max_render = self.max_render_duration.as_secs_f64();
-        let min_render = if self.total_frames_rendered > 0 {
-            self.min_render_duration.as_secs_f64()
-        } else {
-            0.0
-        };
-        
-        (self.fps, avg_upload, avg_render, min_render, max_render)
-    }
-
-    // Add method to get average timings
-    pub fn get_timing_stats(&self) -> (f64, f64) {
-        let avg_upload = if self.upload_durations.is_empty() {
-            0.0
-        } else {
-            self.upload_durations.iter().sum::<Duration>().as_secs_f64() 
-                / self.upload_durations.len() as f64
-        };
-        
-        let avg_render = if self.render_durations.is_empty() {
-            0.0
-        } else {
-            self.render_durations.iter().sum::<Duration>().as_secs_f64()
-                / self.render_durations.len() as f64
-        };
-        
-        (avg_upload, avg_render)
-    }
-
-    // Add method to start upload timing
-    pub fn start_upload_timing(&mut self) {
-        self.current_upload_start = Some(Instant::now());
-    }
-    
-    // Add method to handle batch uploads
-    pub fn record_batch_upload_complete(&mut self, count: usize) {
-        if let Some(start) = self.current_upload_start.take() {
-            let duration = start.elapsed();
-            
-            // Record the average duration per texture
-            if count > 0 {
-                let avg_duration = duration.div_f32(count as f32);
-                self.upload_durations.push_back(avg_duration);
-                
-                while self.upload_durations.len() > 100 {
-                    let _ = self.upload_durations.pop_front();
-                }
-                
-                if avg_duration.as_millis() > 20 {
-                    log::warn!("SLOW BATCH UPLOAD: {:.2}ms avg for {} textures", 
-                             avg_duration.as_secs_f64() * 1000.0, count);
-                }
-            }
-        }
-    }
 }
 
 
@@ -867,13 +709,6 @@ impl ImageDisplayTracker {
 pub fn record_image_upload(handle_hash: String, width: u32, height: u32) {
     if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
         tracker.record_image_upload(handle_hash, width, height);
-    }
-}
-
-// Add this new function to record rendering time measurements
-pub fn record_image_render_duration(duration: Duration) {
-    if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
-        tracker.record_render_duration(duration);
     }
 }
 
@@ -899,54 +734,5 @@ pub fn get_image_upload_timestamps() -> VecDeque<Instant> {
 pub fn sync_image_tracker_timestamps(timestamps: VecDeque<Instant>) {
     if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
         tracker.sync_from_external(timestamps);
-    }
-}
-
-// Add new function to get detailed performance metrics with logging
-pub fn get_image_rendering_stats_with_logging() -> (f64, f64, f64) {
-    if let Ok(tracker) = IMAGE_DISPLAY_TRACKER.lock() {
-        let fps = tracker.get_fps();
-        let (avg_upload, avg_render) = tracker.get_timing_stats();
-        
-        println!("IMAGE PERFORMANCE: FPS: {:.2}, Upload: {:.2}ms, Render: {:.2}ms", 
-                 fps, avg_upload * 1000.0, avg_render * 1000.0);
-        
-        // Log additional stats about recent frames
-        if let Some(last_render) = tracker.render_durations.back() {
-            println!("LAST FRAME: Render time: {:.2}ms", last_render.as_secs_f64() * 1000.0);
-        }
-        
-        return (fps, avg_upload, avg_render);
-    }
-    (0.0, 0.0, 0.0)
-}
-
-// Fix the debug_image_upload_status function to use existing fields
-
-pub fn debug_image_upload_status() {
-    if let Ok(tracker) = IMAGE_DISPLAY_TRACKER.lock() {
-        // Use the fields that actually exist in ImageDisplayTracker
-        let uploads_pending = tracker.upload_timestamps.len();
-        let total_frames = tracker.total_frames_rendered;
-        
-        println!("IMAGE UPLOAD STATUS:");
-        println!("  Recent uploads: {}", uploads_pending);
-        println!("  Total frames rendered: {}", total_frames);
-        println!("  Current FPS: {:.2}", tracker.fps);
-        
-        // Get timing statistics
-        let (avg_upload, avg_render) = tracker.get_timing_stats();
-        println!("  Average upload time: {:.2}ms", avg_upload * 1000.0);
-        println!("  Average render time: {:.2}ms", avg_render * 1000.0);
-        println!("  Min render time: {:.2}ms", tracker.min_render_duration.as_secs_f64() * 1000.0);
-        println!("  Max render time: {:.2}ms", tracker.max_render_duration.as_secs_f64() * 1000.0);
-        
-        // Show recent uploads
-        if !tracker.uploaded_images.is_empty() {
-            println!("RECENTLY UPLOADED IMAGES:");
-            for image_identifier in &tracker.uploaded_images {
-                println!("  {}", image_identifier);
-            }
-        }
     }
 }
