@@ -175,6 +175,7 @@ impl Compositor {
                         &queue,
                         format,
                         settings.antialiasing,
+                        None
                     );
 
                     return Ok(Compositor {

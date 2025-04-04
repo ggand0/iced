@@ -5,6 +5,21 @@ use crate::quad;
 use crate::text;
 use crate::triangle;
 
+#[derive(Debug, Clone)]
+pub struct ImageConfig {
+    pub atlas_size: u32,
+}
+
+#[cfg(feature = "image")]
+impl Default for ImageConfig {
+    fn default() -> Self {
+        Self {
+            atlas_size: crate::image::atlas::SIZE,
+        }
+    }
+}
+
+#[allow(dead_code)]
 #[allow(missing_debug_implementations)]
 pub struct Engine {
     pub(crate) staging_belt: wgpu::util::StagingBelt,
@@ -15,16 +30,20 @@ pub struct Engine {
     pub(crate) triangle_pipeline: triangle::Pipeline,
     #[cfg(any(feature = "image", feature = "svg"))]
     pub(crate) image_pipeline: crate::image::Pipeline,
+    #[cfg(any(feature = "image", feature = "svg"))]
+    pub(crate) image_config: ImageConfig,
     pub(crate) primitive_storage: primitive::Storage,
 }
 
 impl Engine {
+    #[allow(unused_variables)]
     pub fn new(
         _adapter: &wgpu::Adapter,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
         antialiasing: Option<Antialiasing>, // TODO: Initialize AA pipelines lazily
+        image_config: Option<ImageConfig>,
     ) -> Self {
         let text_pipeline = text::Pipeline::new(device, queue, format);
         let quad_pipeline = quad::Pipeline::new(device, format);
@@ -53,6 +72,9 @@ impl Engine {
 
             #[cfg(any(feature = "image", feature = "svg"))]
             image_pipeline,
+
+            #[cfg(any(feature = "image", feature = "svg"))]
+            image_config: image_config.unwrap_or_default(),
 
             primitive_storage: primitive::Storage::default(),
         }

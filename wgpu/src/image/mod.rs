@@ -1,7 +1,7 @@
 pub(crate) mod cache;
 pub(crate) use cache::Cache;
 
-mod atlas;
+pub mod atlas;
 
 #[cfg(feature = "image")]
 mod raster;
@@ -628,15 +628,31 @@ pub struct ImageDisplayTracker {
     
     // Calculated FPS value
     fps: f64,
+    
+    // Timing fields and stats
+    upload_durations: VecDeque<Duration>,
+    render_durations: VecDeque<Duration>,
+    current_upload_start: Option<Instant>,
+    current_render_start: Option<Instant>,
+    max_render_duration: Duration,
+    min_render_duration: Duration,
+    pub total_frames_rendered: usize,
 }
 
 impl ImageDisplayTracker {
     fn new() -> Self {
         Self {
-            window_duration: Duration::from_secs(5),
+            window_duration: Duration::from_secs(2),
             upload_timestamps: VecDeque::with_capacity(120),
             uploaded_images: HashSet::new(),
             fps: 0.0,
+            upload_durations: VecDeque::with_capacity(100),
+            render_durations: VecDeque::with_capacity(100),
+            current_upload_start: None,
+            current_render_start: None,
+            max_render_duration: Duration::from_millis(0),
+            min_render_duration: Duration::from_secs(1000),
+            total_frames_rendered: 0,
         }
     }
     
@@ -653,6 +669,9 @@ impl ImageDisplayTracker {
         
         // Calculate FPS
         self.calculate_fps();
+        
+        // Start timing the upload process
+        self.current_upload_start = Some(Instant::now());
     }
     
     /// Calculate FPS from upload timestamps
@@ -702,6 +721,124 @@ impl ImageDisplayTracker {
             self.calculate_fps();
         }
     }
+
+    // Fix the upload_durations trimming
+    pub fn record_upload_complete(&mut self) {
+        if let Some(start) = self.current_upload_start.take() {
+            let duration = start.elapsed();
+            self.upload_durations.push_back(duration);
+            
+            // Trim old entries - use let _ = to explicitly discard the result
+            while self.upload_durations.len() > 100 {
+                let _ = self.upload_durations.pop_front();
+            }
+        }
+    }
+
+    // Update record_render_duration to log outliers
+    pub fn record_render_duration(&mut self, duration: Duration) {
+        self.render_durations.push_back(duration);
+        
+        self.total_frames_rendered += 1;
+        
+        // Track min/max for outlier detection
+        if duration > self.max_render_duration {
+            self.max_render_duration = duration;
+            println!("SLOW FRAME DETECTED: {:.2}ms", duration.as_secs_f64() * 1000.0);
+        }
+        
+        if duration < self.min_render_duration {
+            self.min_render_duration = duration;
+        }
+        
+        // Log every 50th frame for monitoring
+        if self.total_frames_rendered % 50 == 0 {
+            let (_avg_upload, avg_render) = self.get_timing_stats();
+            println!("RENDER STATS: Frames: {}, FPS: {:.2}, Avg Render: {:.2}ms, Min: {:.2}ms, Max: {:.2}ms", 
+                    self.total_frames_rendered, 
+                    self.fps,
+                    avg_render * 1000.0,
+                    self.min_render_duration.as_secs_f64() * 1000.0,
+                    self.max_render_duration.as_secs_f64() * 1000.0);
+        }
+        
+        while self.render_durations.len() > 100 {
+            let _ = self.render_durations.pop_front();
+        }
+    }
+
+    // Start timing a render operation
+    pub fn start_render_timing(&mut self) {
+        self.current_render_start = Some(Instant::now());
+    }
+    
+    // Complete timing a render operation
+    pub fn complete_render_timing(&mut self) {
+        if let Some(start) = self.current_render_start.take() {
+            let duration = start.elapsed();
+            self.record_render_duration(duration);
+        }
+    }
+    
+    // Enhanced method to get timing stats with more details
+    pub fn get_detailed_timing_stats(&self) -> (f64, f64, f64, f64, f64) {
+        let (avg_upload, avg_render) = self.get_timing_stats();
+        
+        let max_render = self.max_render_duration.as_secs_f64();
+        let min_render = if self.total_frames_rendered > 0 {
+            self.min_render_duration.as_secs_f64()
+        } else {
+            0.0
+        };
+        
+        (self.fps, avg_upload, avg_render, min_render, max_render)
+    }
+
+    // Add method to get average timings
+    pub fn get_timing_stats(&self) -> (f64, f64) {
+        let avg_upload = if self.upload_durations.is_empty() {
+            0.0
+        } else {
+            self.upload_durations.iter().sum::<Duration>().as_secs_f64() 
+                / self.upload_durations.len() as f64
+        };
+        
+        let avg_render = if self.render_durations.is_empty() {
+            0.0
+        } else {
+            self.render_durations.iter().sum::<Duration>().as_secs_f64()
+                / self.render_durations.len() as f64
+        };
+        
+        (avg_upload, avg_render)
+    }
+
+    // Start upload timing
+    pub fn start_upload_timing(&mut self) {
+        self.current_upload_start = Some(Instant::now());
+    }
+    
+    // Handle batch uploads
+    pub fn record_batch_upload_complete(&mut self, count: usize) {
+        if let Some(start) = self.current_upload_start.take() {
+            let duration = start.elapsed();
+            
+            // Record the average duration per texture
+            if count > 0 {
+                let avg_duration = duration.div_f32(count as f32);
+                self.upload_durations.push_back(avg_duration);
+                
+                while self.upload_durations.len() > 100 {
+                    let _ = self.upload_durations.pop_front();
+                }
+                
+                if avg_duration.as_millis() > 20 {
+                    log::warn!("SLOW BATCH UPLOAD: {:.2}ms avg for {} textures", 
+                             avg_duration.as_secs_f64() * 1000.0, count);
+                }
+            }
+        }
+    }
 }
 
 
@@ -734,5 +871,52 @@ pub fn get_image_upload_timestamps() -> VecDeque<Instant> {
 pub fn sync_image_tracker_timestamps(timestamps: VecDeque<Instant>) {
     if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
         tracker.sync_from_external(timestamps);
+    }
+}
+
+// Get detailed performance metrics with logging
+pub fn get_image_rendering_stats_with_logging() -> (f64, f64, f64) {
+    if let Ok(tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        let fps = tracker.get_fps();
+        let (avg_upload, avg_render) = tracker.get_timing_stats();
+        
+        println!("IMAGE PERFORMANCE: FPS: {:.2}, Upload: {:.2}ms, Render: {:.2}ms", 
+                 fps, avg_upload * 1000.0, avg_render * 1000.0);
+        
+        // Log additional stats about recent frames
+        if let Some(last_render) = tracker.render_durations.back() {
+            println!("LAST FRAME: Render time: {:.2}ms", last_render.as_secs_f64() * 1000.0);
+        }
+        
+        return (fps, avg_upload, avg_render);
+    }
+    (0.0, 0.0, 0.0)
+}
+
+pub fn debug_image_upload_status() {
+    if let Ok(tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        // Use the fields that actually exist in ImageDisplayTracker
+        let uploads_pending = tracker.upload_timestamps.len();
+        let total_frames = tracker.total_frames_rendered;
+        
+        println!("IMAGE UPLOAD STATUS:");
+        println!("  Recent uploads: {}", uploads_pending);
+        println!("  Total frames rendered: {}", total_frames);
+        println!("  Current FPS: {:.2}", tracker.fps);
+        
+        // Get timing statistics
+        let (avg_upload, avg_render) = tracker.get_timing_stats();
+        println!("  Average upload time: {:.2}ms", avg_upload * 1000.0);
+        println!("  Average render time: {:.2}ms", avg_render * 1000.0);
+        println!("  Min render time: {:.2}ms", tracker.min_render_duration.as_secs_f64() * 1000.0);
+        println!("  Max render time: {:.2}ms", tracker.max_render_duration.as_secs_f64() * 1000.0);
+        
+        // Show recent uploads
+        if !tracker.uploaded_images.is_empty() {
+            println!("RECENTLY UPLOADED IMAGES:");
+            for image_identifier in &tracker.uploaded_images {
+                println!("  {}", image_identifier);
+            }
+        }
     }
 }

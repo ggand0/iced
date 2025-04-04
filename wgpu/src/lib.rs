@@ -32,7 +32,7 @@ pub mod geometry;
 
 mod buffer;
 mod color;
-mod engine;
+pub mod engine;
 mod quad;
 mod text;
 mod triangle;
@@ -627,4 +627,22 @@ pub fn get_image_upload_timestamps() -> std::collections::VecDeque<std::time::In
 #[cfg(any(feature = "image", feature = "svg"))]
 pub fn sync_image_tracker_timestamps(timestamps: std::collections::VecDeque<std::time::Instant>) {
     image::sync_image_tracker_timestamps(timestamps)
+}
+
+/// Get comprehensive image rendering diagnostics
+#[cfg(any(feature = "image", feature = "svg"))]
+pub fn get_image_rendering_diagnostics() -> (f64, f64, f64, f64, f64, usize) {
+    if let Ok(tracker) = image::IMAGE_DISPLAY_TRACKER.lock() {
+        let (fps, avg_upload, avg_render, min_render, max_render) = 
+            tracker.get_detailed_timing_stats();
+        let frame_count = tracker.total_frames_rendered;
+        return (fps, avg_upload, avg_render, min_render, max_render, frame_count);
+    }
+    (0.0, 0.0, 0.0, 0.0, 0.0, 0)
+}
+
+/// Log current image rendering performance stats
+#[cfg(any(feature = "image", feature = "svg"))]
+pub fn log_image_rendering_stats() {
+    let _ = image::get_image_rendering_stats_with_logging();
 }
