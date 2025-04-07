@@ -561,6 +561,15 @@ impl Atlas {
         let (x, y) = allocation.position();
         let layer = allocation.layer();
         
+        // BC1 requires coordinates to be aligned to 4-pixel blocks
+        // Round down to nearest multiple of 4
+        let aligned_x = (x / 4) * 4;
+        let aligned_y = (y / 4) * 4;
+        
+        // Calculate offsets within the block
+        let x_offset = x - aligned_x;
+        let y_offset = y - aligned_y;
+        
         // Convert to 4x4 blocks for BC1 compression
         let blocks_x = (width + 3) / 4;
         let blocks_y = (height + 3) / 4;
@@ -645,8 +654,8 @@ impl Atlas {
                 texture: &self.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d {
-                    x,
-                    y,
+                    x: aligned_x,
+                    y: aligned_y,
                     z: layer as u32,
                 },
                 aspect: wgpu::TextureAspect::default(),
