@@ -17,6 +17,9 @@ use crate::graphics::color;
 
 use std::sync::Arc;
 
+use crate::image::compression;
+use crate::engine::CompressionStrategy;
+
 #[derive(Debug)]
 pub struct Atlas {
     texture: wgpu::Texture,
@@ -24,6 +27,7 @@ pub struct Atlas {
     texture_bind_group: wgpu::BindGroup,
     texture_layout: Arc<wgpu::BindGroupLayout>,
     layers: Vec<Layer>,
+    compression_strategy: CompressionStrategy,
 }
 
 impl Atlas {
@@ -31,6 +35,7 @@ impl Atlas {
         device: &wgpu::Device,
         backend: wgpu::Backend,
         texture_layout: Arc<wgpu::BindGroupLayout>,
+        compression_strategy: CompressionStrategy,
     ) -> Self {
         let layers = match backend {
             // On the GL backend we start with 2 layers, to help wgpu figure
@@ -46,17 +51,28 @@ impl Atlas {
             depth_or_array_layers: layers.len() as u32,
         };
 
+        // Choose texture format based on compression strategy
+        let format = match compression_strategy {
+            CompressionStrategy::None => {
+                if color::GAMMA_CORRECTION {
+                    wgpu::TextureFormat::Rgba8UnormSrgb
+                } else {
+                    wgpu::TextureFormat::Rgba8Unorm
+                }
+            },
+            CompressionStrategy::Bc1 => {
+                // BC1 doesn't have an sRGB variant in wgpu (we'd need BC7 for that)
+                wgpu::TextureFormat::Bc1RgbaUnorm
+            },
+        };
+
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("iced_wgpu::image texture atlas"),
             size: extent,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: if color::GAMMA_CORRECTION {
-                wgpu::TextureFormat::Rgba8UnormSrgb
-            } else {
-                wgpu::TextureFormat::Rgba8Unorm
-            },
+            format,
             usage: wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -84,6 +100,7 @@ impl Atlas {
             texture_bind_group,
             texture_layout,
             layers,
+            compression_strategy,
         }
     }
 
@@ -116,54 +133,63 @@ impl Atlas {
 
         log::debug!("Allocated atlas entry: {entry:?}");
 
-        // It is a webgpu requirement that:
-        //   BufferCopyView.layout.bytes_per_row % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT == 0
-        // So we calculate padded_width by rounding width up to the next
-        // multiple of wgpu::COPY_BYTES_PER_ROW_ALIGNMENT.
-        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let padding = (align - (4 * width) % align) % align;
-        let padded_width = (4 * width + padding) as usize;
-        let padded_data_size = padded_width * height as usize;
+        match self.compression_strategy {
+            CompressionStrategy::None => {
+                // Original uncompressed upload path
+                // It is a webgpu requirement that:
+                //   BufferCopyView.layout.bytes_per_row % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT == 0
+                // So we calculate padded_width by rounding width up to the next
+                // multiple of wgpu::COPY_BYTES_PER_ROW_ALIGNMENT.
+                let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+                let padding = (align - (4 * width) % align) % align;
+                let padded_width = (4 * width + padding) as usize;
+                let padded_data_size = padded_width * height as usize;
 
-        let mut padded_data = vec![0; padded_data_size];
+                let mut padded_data = vec![0; padded_data_size];
 
-        for row in 0..height as usize {
-            let offset = row * padded_width;
+                for row in 0..height as usize {
+                    let offset = row * padded_width;
 
-            padded_data[offset..offset + 4 * width as usize].copy_from_slice(
-                &data[row * 4 * width as usize..(row + 1) * 4 * width as usize],
-            );
-        }
-
-        match &entry {
-            Entry::Contiguous(allocation) => {
-                self.upload_allocation(
-                    &padded_data,
-                    width,
-                    height,
-                    padding,
-                    0,
-                    allocation,
-                    device,
-                    encoder,
-                );
-            }
-            Entry::Fragmented { fragments, .. } => {
-                for fragment in fragments {
-                    let (x, y) = fragment.position;
-                    let offset = (y * padded_width as u32 + 4 * x) as usize;
-
-                    self.upload_allocation(
-                        &padded_data,
-                        width,
-                        height,
-                        padding,
-                        offset,
-                        &fragment.allocation,
-                        device,
-                        encoder,
+                    padded_data[offset..offset + 4 * width as usize].copy_from_slice(
+                        &data[row * 4 * width as usize..(row + 1) * 4 * width as usize],
                     );
                 }
+
+                match &entry {
+                    Entry::Contiguous(allocation) => {
+                        self.upload_allocation(
+                            &padded_data,
+                            width,
+                            height,
+                            padding,
+                            0,
+                            allocation,
+                            device,
+                            encoder,
+                        );
+                    }
+                    Entry::Fragmented { fragments, .. } => {
+                        for fragment in fragments {
+                            let (x, y) = fragment.position;
+                            let offset = (y * padded_width as u32 + 4 * x) as usize;
+
+                            self.upload_allocation(
+                                &padded_data,
+                                width,
+                                height,
+                                padding,
+                                offset,
+                                &fragment.allocation,
+                                device,
+                                encoder,
+                            );
+                        }
+                    }
+                }
+            },
+            CompressionStrategy::Bc1 => {
+                // New compressed upload path
+                self.upload_compressed(device, encoder, width, height, data, &entry);
             }
         }
 
@@ -376,6 +402,20 @@ impl Atlas {
             return;
         }
 
+        // Choose format based on compression strategy
+        let format = match self.compression_strategy {
+            CompressionStrategy::None => {
+                if color::GAMMA_CORRECTION {
+                    wgpu::TextureFormat::Rgba8UnormSrgb
+                } else {
+                    wgpu::TextureFormat::Rgba8Unorm
+                }
+            },
+            CompressionStrategy::Bc1 => {
+                wgpu::TextureFormat::Bc1RgbaUnorm
+            },
+        };
+
         let new_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("iced_wgpu::image texture atlas"),
             size: wgpu::Extent3d {
@@ -386,11 +426,7 @@ impl Atlas {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: if color::GAMMA_CORRECTION {
-                wgpu::TextureFormat::Rgba8UnormSrgb
-            } else {
-                wgpu::TextureFormat::Rgba8Unorm
-            },
+            format,
             usage: wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::TEXTURE_BINDING,
@@ -453,5 +489,173 @@ impl Atlas {
                     ),
                 }],
             });
+    }
+
+    // New method to handle compressed uploads
+    fn upload_compressed(
+        &mut self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        width: u32,
+        height: u32,
+        data: &[u8],
+        entry: &Entry,
+    ) {
+        match &entry {
+            Entry::Contiguous(allocation) => {
+                self.upload_compressed_allocation(
+                    device,
+                    encoder,
+                    width,
+                    height, 
+                    data,
+                    allocation,
+                );
+            }
+            Entry::Fragmented { fragments, .. } => {
+                for fragment in fragments {
+                    let (x, y) = fragment.position;
+                    let fragment_width = fragment.allocation.size().width;
+                    let fragment_height = fragment.allocation.size().height;
+                    
+                    // Extract fragment data from the original image
+                    let mut fragment_data = Vec::with_capacity((fragment_width * fragment_height * 4) as usize);
+                    for fy in 0..fragment_height {
+                        for fx in 0..fragment_width {
+                            let src_x = x + fx;
+                            let src_y = y + fy;
+                            if src_x < width && src_y < height {
+                                let src_idx = ((src_y * width + src_x) * 4) as usize;
+                                fragment_data.extend_from_slice(&data[src_idx..src_idx+4]);
+                            } else {
+                                // Padding for fragments that extend beyond the original image
+                                fragment_data.extend_from_slice(&[0, 0, 0, 0]);
+                            }
+                        }
+                    }
+                    
+                    self.upload_compressed_allocation(
+                        device,
+                        encoder,
+                        fragment_width,
+                        fragment_height,
+                        &fragment_data,
+                        &fragment.allocation,
+                    );
+                }
+            }
+        }
+    }
+
+    fn upload_compressed_allocation(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        width: u32,
+        height: u32,
+        data: &[u8],
+        allocation: &Allocation,
+    ) {
+        use wgpu::util::DeviceExt;
+
+        let (x, y) = allocation.position();
+        let layer = allocation.layer();
+        
+        // Convert to 4x4 blocks for BC1 compression
+        let blocks_x = (width + 3) / 4;
+        let blocks_y = (height + 3) / 4;
+        
+        // Create RGBA blocks from the raw data
+        let mut rgba_blocks = Vec::with_capacity((blocks_x * blocks_y) as usize);
+        
+        for by in 0..blocks_y {
+            for bx in 0..blocks_x {
+                let mut block = [[0u8; 4]; 16];
+                for py in 0..4 {
+                    for px in 0..4 {
+                        let img_x = bx * 4 + px;
+                        let img_y = by * 4 + py;
+                        
+                        if img_x < width && img_y < height {
+                            let idx = ((img_y * width + img_x) * 4) as usize;
+                            block[(py * 4 + px) as usize] = [
+                                data[idx],
+                                data[idx + 1],
+                                data[idx + 2],
+                                data[idx + 3],
+                            ];
+                        }
+                    }
+                }
+                
+                // Compress the block and add it to our list
+                let compressed = compression::compress_bc1_block(
+                    &block, 
+                    compression::CompressionAlgorithm::RangeFit
+                );
+                rgba_blocks.push(compressed);
+            }
+        }
+        
+        // Flatten the blocks
+        let compressed_data: Vec<u8> = rgba_blocks.into_iter().flat_map(|b| b.to_vec()).collect();
+        
+        // BC1 format is 8 bytes per 4x4 pixel block
+        let bytes_per_row = blocks_x * 8;
+        
+        // Align to wgpu requirements
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padding = (align - (bytes_per_row % align)) % align;
+        let padded_bytes_per_row = bytes_per_row + padding;
+        
+        // Create padded data if needed
+        let upload_data = if padding == 0 {
+            compressed_data
+        } else {
+            let mut padded_data = Vec::with_capacity((padded_bytes_per_row * blocks_y) as usize);
+            for i in 0..blocks_y {
+                let start = (i * bytes_per_row) as usize;
+                let end = start + bytes_per_row as usize;
+                padded_data.extend_from_slice(&compressed_data[start..end]);
+                padded_data.extend(std::iter::repeat(0).take(padding as usize));
+            }
+            padded_data
+        };
+        
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("compressed image upload buffer"),
+            contents: &upload_data,
+            usage: wgpu::BufferUsages::COPY_SRC,
+        });
+        
+        // Size in blocks (each block is 4x4 pixels)
+        let width_blocks = (width + 3) / 4;
+        let height_blocks = (height + 3) / 4;
+        
+        encoder.copy_buffer_to_texture(
+            wgpu::ImageCopyBuffer {
+                buffer: &buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height_blocks),
+                },
+            },
+            wgpu::ImageCopyTexture {
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x,
+                    y,
+                    z: layer as u32,
+                },
+                aspect: wgpu::TextureAspect::default(),
+            },
+            wgpu::Extent3d {
+                width: width_blocks * 4,  // Convert back to pixels for the extent
+                height: height_blocks * 4,
+                depth_or_array_layers: 1,
+            },
+        );
     }
 }

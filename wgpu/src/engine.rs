@@ -8,6 +8,7 @@ use crate::triangle;
 #[derive(Debug, Clone)]
 pub struct ImageConfig {
     pub atlas_size: u32,
+    pub compression_strategy: CompressionStrategy,
 }
 
 #[cfg(feature = "image")]
@@ -15,8 +16,17 @@ impl Default for ImageConfig {
     fn default() -> Self {
         Self {
             atlas_size: crate::image::atlas::SIZE,
+            compression_strategy: CompressionStrategy::None,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompressionStrategy {
+    /// No compression, use RGBA8 formats (default)
+    None,
+    /// Use BC1 compression for textures
+    Bc1,
 }
 
 #[allow(dead_code)]
@@ -54,7 +64,7 @@ impl Engine {
         let image_pipeline = {
             let backend = _adapter.get_info().backend;
 
-            crate::image::Pipeline::new(device, format, backend)
+            crate::image::Pipeline::new(device, format, backend, image_config.as_ref())
         };
 
         Self {

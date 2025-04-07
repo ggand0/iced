@@ -2,6 +2,7 @@ pub(crate) mod cache;
 pub(crate) use cache::Cache;
 
 pub mod atlas;
+mod compression;
 
 #[cfg(feature = "image")]
 mod raster;
@@ -36,6 +37,7 @@ pub struct Pipeline {
     constant_layout: wgpu::BindGroupLayout,
     layers: Vec<Layer>,
     prepare_layer: usize,
+    image_config: crate::engine::ImageConfig,
 }
 
 impl Pipeline {
@@ -43,6 +45,7 @@ impl Pipeline {
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         backend: wgpu::Backend,
+        image_config: Option<&crate::engine::ImageConfig>,
     ) -> Self {
         let nearest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -193,6 +196,9 @@ impl Pipeline {
                 multiview: None,
             });
 
+        // Use default config if none provided
+        let config = image_config.cloned().unwrap_or_default();
+
         Pipeline {
             pipeline,
             backend,
@@ -202,11 +208,17 @@ impl Pipeline {
             constant_layout,
             layers: Vec::new(),
             prepare_layer: 0,
+            image_config: config,
         }
     }
 
     pub fn create_cache(&self, device: &wgpu::Device) -> Cache {
-        Cache::new(device, self.backend, self.texture_layout.clone())
+        Cache::new(
+            device, 
+            self.backend, 
+            self.texture_layout.clone(),
+            self.image_config.compression_strategy,
+        )
     }
 
     pub fn prepare(

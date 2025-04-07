@@ -44,3 +44,5 @@ lyon.optional = true
 
 resvg.workspace = true
 resvg.optional = true
+
+rayon.workspace = true
