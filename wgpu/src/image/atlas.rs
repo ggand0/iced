@@ -63,10 +63,10 @@ impl Atlas {
                 }
             },
             CompressionStrategy::Bc1 => {
-                // BC1 doesn't have an sRGB variant in wgpu (we'd need BC7 for that)
-                wgpu::TextureFormat::Bc1RgbaUnorm
+                wgpu::TextureFormat::Bc1RgbaUnormSrgb
             },
         };
+        log::debug!("Texture format: {:?}", format);
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("iced_wgpu::image texture atlas"),
@@ -417,7 +417,7 @@ impl Atlas {
                 }
             },
             CompressionStrategy::Bc1 => {
-                wgpu::TextureFormat::Bc1RgbaUnorm
+                wgpu::TextureFormat::Bc1RgbaUnormSrgb
             },
         };
 
