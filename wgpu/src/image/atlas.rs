@@ -37,6 +37,8 @@ impl Atlas {
         texture_layout: Arc<wgpu::BindGroupLayout>,
         compression_strategy: CompressionStrategy,
     ) -> Self {
+        log::info!("Creating new atlas with compression strategy: {:?}", compression_strategy);
+
         let layers = match backend {
             // On the GL backend we start with 2 layers, to help wgpu figure
             // out that this texture is `GL_TEXTURE_2D_ARRAY` rather than `GL_TEXTURE_2D`
@@ -135,6 +137,8 @@ impl Atlas {
 
         match self.compression_strategy {
             CompressionStrategy::None => {
+                log::debug!("Uploading uncompressed image");
+
                 // Original uncompressed upload path
                 // It is a webgpu requirement that:
                 //   BufferCopyView.layout.bytes_per_row % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT == 0
@@ -188,6 +192,7 @@ impl Atlas {
                 }
             },
             CompressionStrategy::Bc1 => {
+                log::debug!("Uploading compressed image with BC1");
                 // New compressed upload path
                 self.upload_compressed(device, encoder, width, height, data, &entry);
             }
@@ -566,48 +571,20 @@ impl Atlas {
         let aligned_x = (x / 4) * 4;
         let aligned_y = (y / 4) * 4;
         
-        // Calculate offsets within the block
-        let x_offset = x - aligned_x;
-        let y_offset = y - aligned_y;
-        
-        // Convert to 4x4 blocks for BC1 compression
-        let blocks_x = (width + 3) / 4;
-        let blocks_y = (height + 3) / 4;
-        
-        // Create RGBA blocks from the raw data
-        let mut rgba_blocks = Vec::with_capacity((blocks_x * blocks_y) as usize);
-        
-        for by in 0..blocks_y {
-            for bx in 0..blocks_x {
-                let mut block = [[0u8; 4]; 16];
-                for py in 0..4 {
-                    for px in 0..4 {
-                        let img_x = bx * 4 + px;
-                        let img_y = by * 4 + py;
-                        
-                        if img_x < width && img_y < height {
-                            let idx = ((img_y * width + img_x) * 4) as usize;
-                            block[(py * 4 + px) as usize] = [
-                                data[idx],
-                                data[idx + 1],
-                                data[idx + 2],
-                                data[idx + 3],
-                            ];
-                        }
-                    }
-                }
-                
-                // Compress the block and add it to our list
-                let compressed = compression::compress_bc1_block(
-                    &block, 
-                    compression::CompressionAlgorithm::RangeFit
-                );
-                rgba_blocks.push(compressed);
-            }
-        }
+        // Use the existing compress_image_bc1 function which already uses rayon
+        let compressed_blocks = compression::compress_image_bc1(
+            data, 
+            width as usize, 
+            height as usize,
+            compression::CompressionAlgorithm::RangeFit
+        );
         
         // Flatten the blocks
-        let compressed_data: Vec<u8> = rgba_blocks.into_iter().flat_map(|b| b.to_vec()).collect();
+        let compressed_data: Vec<u8> = compressed_blocks.into_iter().flat_map(|b| b.to_vec()).collect();
+        
+        // Calculate dimensions in blocks
+        let blocks_x = (width + 3) / 4;
+        let blocks_y = (height + 3) / 4;
         
         // BC1 format is 8 bytes per 4x4 pixel block
         let bytes_per_row = blocks_x * 8;
@@ -637,17 +614,13 @@ impl Atlas {
             usage: wgpu::BufferUsages::COPY_SRC,
         });
         
-        // Size in blocks (each block is 4x4 pixels)
-        let width_blocks = (width + 3) / 4;
-        let height_blocks = (height + 3) / 4;
-        
         encoder.copy_buffer_to_texture(
             wgpu::ImageCopyBuffer {
                 buffer: &buffer,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
                     bytes_per_row: Some(padded_bytes_per_row),
-                    rows_per_image: Some(height_blocks),
+                    rows_per_image: Some(blocks_y),
                 },
             },
             wgpu::ImageCopyTexture {
@@ -661,8 +634,8 @@ impl Atlas {
                 aspect: wgpu::TextureAspect::default(),
             },
             wgpu::Extent3d {
-                width: width_blocks * 4,  // Convert back to pixels for the extent
-                height: height_blocks * 4,
+                width: blocks_x * 4,  // Convert back to pixels for the extent
+                height: blocks_y * 4,
                 depth_or_array_layers: 1,
             },
         );
