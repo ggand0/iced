@@ -98,6 +98,25 @@ impl Engine {
         self.image_pipeline.create_cache(device)
     }
 
+    /// Updates the image configuration settings
+    /// 
+    /// This allows changing compression strategy and other image-related settings
+    /// at runtime.
+    #[cfg(any(feature = "image", feature = "svg"))]
+    pub fn update_image_config(
+        &mut self,
+        image_config: ImageConfig,
+        device: &wgpu::Device,
+    ) -> crate::image::Cache {
+        // Update the stored config
+        self.image_config = image_config.clone();
+        self.image_pipeline.update_image_config(image_config);
+        
+        // Create a new cache with the updated settings
+        // This will use the new compression strategy for future uploads
+        self.create_image_cache(device)
+    }
+
     pub fn submit(
         &mut self,
         queue: &wgpu::Queue,

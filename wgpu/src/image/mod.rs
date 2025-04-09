@@ -221,6 +221,10 @@ impl Pipeline {
         )
     }
 
+    pub fn update_image_config(&mut self, image_config: crate::engine::ImageConfig) {
+        self.image_config = image_config;
+    }
+
     pub fn prepare(
         &mut self,
         device: &wgpu::Device,
