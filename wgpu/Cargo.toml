@@ -46,3 +46,4 @@ resvg.workspace = true
 resvg.optional = true
 
 rayon.workspace = true
+texpresso.workspace = true

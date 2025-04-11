@@ -190,6 +190,7 @@ window_clipboard = "0.4.1"
 winit = { git = "https://github.com/ggand0/winit.git", rev = "e6ca302116d7f5c6c212cf659db63fabed9afbe5" }
 #winit = { git = "https://github.com/rust-windowing/winit.git", branch = "master" }
 rayon = "1.8"
+texpresso = { version = "2.0.1", features = ["rayon"] }
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "forbid", priority = -1 }

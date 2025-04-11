@@ -20,6 +20,8 @@ use std::sync::Arc;
 use crate::image::compression;
 use crate::engine::CompressionStrategy;
 
+use texpresso::{Format, Algorithm, Params, COLOUR_WEIGHTS_PERCEPTUAL};
+
 #[derive(Debug)]
 pub struct Atlas {
     texture: wgpu::Texture,
@@ -571,26 +573,40 @@ impl Atlas {
         let aligned_x = (x / 4) * 4;
         let aligned_y = (y / 4) * 4;
         
-        // Use the existing compress_image_bc1 function which already uses rayon
-        let compressed_blocks = compression::compress_image_bc1(
+        // Convert dimensions to usize for texpresso
+        let width_usize = width as usize;
+        let height_usize = height as usize;
+        
+        // Calculate blocks and output size
+        let blocks_x = (width_usize + 3) / 4;
+        let blocks_y = (height_usize + 3) / 4;
+        let block_size = Format::Bc1.block_size();
+        let output_size = blocks_x * blocks_y * block_size;
+        
+        // Create output buffer
+        let mut compressed_data = vec![0u8; output_size];
+        
+        // Set up compression parameters
+        let params = Params {
+            algorithm: Algorithm::RangeFit, // Fast and good quality
+            weights: COLOUR_WEIGHTS_PERCEPTUAL,
+            weigh_colour_by_alpha: true,
+        };
+        
+        // Compress the image with texpresso
+        Format::Bc1.compress(
             data, 
-            width as usize, 
-            height as usize,
-            compression::CompressionAlgorithm::RangeFit
+            width_usize, 
+            height_usize, 
+            params, 
+            &mut compressed_data
         );
         
-        // Flatten the blocks
-        let compressed_data: Vec<u8> = compressed_blocks.into_iter().flat_map(|b| b.to_vec()).collect();
-        
-        // Calculate dimensions in blocks
-        let blocks_x = (width + 3) / 4;
-        let blocks_y = (height + 3) / 4;
-        
-        // BC1 format is 8 bytes per 4x4 pixel block
-        let bytes_per_row = blocks_x * 8;
+        // Calculate bytes per row
+        let bytes_per_row = blocks_x * block_size;
         
         // Align to wgpu requirements
-        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize;
         let padding = (align - (bytes_per_row % align)) % align;
         let padded_bytes_per_row = bytes_per_row + padding;
         
@@ -598,12 +614,12 @@ impl Atlas {
         let upload_data = if padding == 0 {
             compressed_data
         } else {
-            let mut padded_data = Vec::with_capacity((padded_bytes_per_row * blocks_y) as usize);
+            let mut padded_data = Vec::with_capacity(padded_bytes_per_row * blocks_y);
             for i in 0..blocks_y {
-                let start = (i * bytes_per_row) as usize;
-                let end = start + bytes_per_row as usize;
+                let start = i * bytes_per_row;
+                let end = start + bytes_per_row;
                 padded_data.extend_from_slice(&compressed_data[start..end]);
-                padded_data.extend(std::iter::repeat(0).take(padding as usize));
+                padded_data.extend(std::iter::repeat(0).take(padding));
             }
             padded_data
         };
@@ -619,8 +635,8 @@ impl Atlas {
                 buffer: &buffer,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: Some(padded_bytes_per_row),
-                    rows_per_image: Some(blocks_y),
+                    bytes_per_row: Some(padded_bytes_per_row as u32),
+                    rows_per_image: Some(blocks_y as u32),
                 },
             },
             wgpu::ImageCopyTexture {
@@ -634,8 +650,8 @@ impl Atlas {
                 aspect: wgpu::TextureAspect::default(),
             },
             wgpu::Extent3d {
-                width: blocks_x * 4,  // Convert back to pixels for the extent
-                height: blocks_y * 4,
+                width: blocks_x as u32 * 4,  // Convert back to pixels for the extent
+                height: blocks_y as u32 * 4,
                 depth_or_array_layers: 1,
             },
         );
