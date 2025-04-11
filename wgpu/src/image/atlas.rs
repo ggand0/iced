@@ -17,7 +17,6 @@ use crate::graphics::color;
 
 use std::sync::Arc;
 
-use crate::image::compression;
 use crate::engine::CompressionStrategy;
 
 use texpresso::{Format, Algorithm, Params, COLOUR_WEIGHTS_PERCEPTUAL};

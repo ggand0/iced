@@ -2,7 +2,6 @@ pub(crate) mod cache;
 pub(crate) use cache::Cache;
 
 pub mod atlas;
-mod compression;
 
 #[cfg(feature = "image")]
 mod raster;
@@ -896,13 +895,13 @@ pub fn get_image_rendering_stats_with_logging() -> (f64, f64, f64) {
         let fps = tracker.get_fps();
         let (avg_upload, avg_render) = tracker.get_timing_stats();
         
-        println!("IMAGE PERFORMANCE: FPS: {:.2}, Upload: {:.2}ms, Render: {:.2}ms", 
-                 fps, avg_upload * 1000.0, avg_render * 1000.0);
-        
-        // Log additional stats about recent frames
-        if let Some(last_render) = tracker.render_durations.back() {
-            println!("LAST FRAME: Render time: {:.2}ms", last_render.as_secs_f64() * 1000.0);
-        }
+        //println!("IMAGE PERFORMANCE: FPS: {:.2}, Upload: {:.2}ms, Render: {:.2}ms", 
+        //         fps, avg_upload * 1000.0, avg_render * 1000.0);
+        //
+        //// Log additional stats about recent frames
+        //if let Some(last_render) = tracker.render_durations.back() {
+        //    println!("LAST FRAME: Render time: {:.2}ms", last_render.as_secs_f64() * 1000.0);
+        //}
         
         return (fps, avg_upload, avg_render);
     }
