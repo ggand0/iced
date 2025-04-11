@@ -109,6 +109,21 @@ impl Renderer {
         }
     }
 
+    /// Updates the image configuration and refreshes the image cache
+    #[cfg(any(feature = "svg", feature = "image"))]
+    pub fn update_image_config(
+        &mut self,
+        device: &wgpu::Device,
+        engine: &mut Engine,
+        image_config: engine::ImageConfig,
+    ) {
+        // Get the new cache from engine
+        let new_cache = engine.update_image_config(image_config, device);
+        
+        // Replace the existing cache with the new one
+        self.image_cache = std::cell::RefCell::new(new_cache);
+    }
+
     pub fn present<T: AsRef<str>>(
         &mut self,
         engine: &mut Engine,

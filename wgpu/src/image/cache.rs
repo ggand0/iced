@@ -1,5 +1,6 @@
 use crate::core::{self, Size};
 use crate::image::atlas::{self, Atlas};
+use crate::engine::CompressionStrategy;
 
 use std::sync::Arc;
 
@@ -17,9 +18,10 @@ impl Cache {
         device: &wgpu::Device,
         backend: wgpu::Backend,
         layout: Arc<wgpu::BindGroupLayout>,
+        compression_strategy: CompressionStrategy,
     ) -> Self {
         Self {
-            atlas: Atlas::new(device, backend, layout),
+            atlas: Atlas::new(device, backend, layout, compression_strategy),
             #[cfg(feature = "image")]
             raster: crate::image::raster::Cache::default(),
             #[cfg(feature = "svg")]

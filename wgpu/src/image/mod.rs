@@ -36,6 +36,7 @@ pub struct Pipeline {
     constant_layout: wgpu::BindGroupLayout,
     layers: Vec<Layer>,
     prepare_layer: usize,
+    image_config: crate::engine::ImageConfig,
 }
 
 impl Pipeline {
@@ -43,6 +44,7 @@ impl Pipeline {
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         backend: wgpu::Backend,
+        image_config: Option<&crate::engine::ImageConfig>,
     ) -> Self {
         let nearest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -193,6 +195,9 @@ impl Pipeline {
                 multiview: None,
             });
 
+        // Use default config if none provided
+        let config = image_config.cloned().unwrap_or_default();
+
         Pipeline {
             pipeline,
             backend,
@@ -202,11 +207,21 @@ impl Pipeline {
             constant_layout,
             layers: Vec::new(),
             prepare_layer: 0,
+            image_config: config,
         }
     }
 
     pub fn create_cache(&self, device: &wgpu::Device) -> Cache {
-        Cache::new(device, self.backend, self.texture_layout.clone())
+        Cache::new(
+            device, 
+            self.backend, 
+            self.texture_layout.clone(),
+            self.image_config.compression_strategy,
+        )
+    }
+
+    pub fn update_image_config(&mut self, image_config: crate::engine::ImageConfig) {
+        self.image_config = image_config;
     }
 
     pub fn prepare(
@@ -880,13 +895,13 @@ pub fn get_image_rendering_stats_with_logging() -> (f64, f64, f64) {
         let fps = tracker.get_fps();
         let (avg_upload, avg_render) = tracker.get_timing_stats();
         
-        println!("IMAGE PERFORMANCE: FPS: {:.2}, Upload: {:.2}ms, Render: {:.2}ms", 
-                 fps, avg_upload * 1000.0, avg_render * 1000.0);
-        
-        // Log additional stats about recent frames
-        if let Some(last_render) = tracker.render_durations.back() {
-            println!("LAST FRAME: Render time: {:.2}ms", last_render.as_secs_f64() * 1000.0);
-        }
+        //println!("IMAGE PERFORMANCE: FPS: {:.2}, Upload: {:.2}ms, Render: {:.2}ms", 
+        //         fps, avg_upload * 1000.0, avg_render * 1000.0);
+        //
+        //// Log additional stats about recent frames
+        //if let Some(last_render) = tracker.render_durations.back() {
+        //    println!("LAST FRAME: Render time: {:.2}ms", last_render.as_secs_f64() * 1000.0);
+        //}
         
         return (fps, avg_upload, avg_render);
     }
