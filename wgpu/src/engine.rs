@@ -117,6 +117,11 @@ impl Engine {
         self.create_image_cache(device)
     }
 
+    /// Clears all stored data in the [`primitive::Storage`], releasing associated GPU resources
+    pub fn clear_primitive_storage(&mut self) {
+        self.primitive_storage.clear();
+    }
+
     pub fn submit(
         &mut self,
         queue: &wgpu::Queue,

@@ -92,4 +92,9 @@ impl Storage {
                 .expect("Value with this type does not exist in Storage.")
         })
     }
+
+    /// Clears all stored data, releasing associated GPU resources
+    pub fn clear(&mut self) {
+        self.pipelines.clear();
+    }
 }
