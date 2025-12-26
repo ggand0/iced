@@ -624,12 +624,20 @@ impl graphics::compositor::Default for crate::Renderer {
     type Compositor = window::Compositor;
 }
 
-/// Get the current image rendering FPS 
+/// Get the current image rendering FPS
 /// This is a global function accessible to applications
 #[allow(dead_code)]
 #[cfg(any(feature = "image", feature = "svg"))]
 pub fn get_image_fps() -> f64 {
     image::get_image_display_fps()
+}
+
+/// Reset the image FPS tracker for fresh measurements
+/// Call this when starting a new benchmark run to clear stale data
+#[allow(dead_code)]
+#[cfg(any(feature = "image", feature = "svg"))]
+pub fn reset_image_fps() {
+    image::reset_image_display_tracker()
 }
 
 #[allow(dead_code)]

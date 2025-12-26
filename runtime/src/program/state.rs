@@ -85,6 +85,15 @@ where
         self.queued_messages.clear();
     }
 
+    /// Clears all currently queued events in the [`State`].
+    ///
+    /// This can be useful when the event queue becomes overloaded
+    /// with too many events from successive async operations.
+    pub fn clear_queued_events(&mut self) {
+        self.queued_events.clear();
+    }
+
+
     /// Returns whether the event queue of the [`State`] is empty or not.
     pub fn is_queue_empty(&self) -> bool {
         self.queued_events.is_empty() && self.queued_messages.is_empty()

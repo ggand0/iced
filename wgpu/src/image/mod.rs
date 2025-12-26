@@ -670,6 +670,20 @@ impl ImageDisplayTracker {
             total_frames_rendered: 0,
         }
     }
+
+    /// Reset all tracking state for fresh measurements
+    pub fn reset(&mut self) {
+        self.upload_timestamps.clear();
+        self.uploaded_images.clear();
+        self.fps = 0.0;
+        self.upload_durations.clear();
+        self.render_durations.clear();
+        self.current_upload_start = None;
+        self.current_render_start = None;
+        self.max_render_duration = Duration::from_millis(0);
+        self.min_render_duration = Duration::from_secs(1000);
+        self.total_frames_rendered = 0;
+    }
     
     /// Record an image upload for FPS tracking
     pub fn record_image_upload(&mut self, handle_hash: String, width: u32, height: u32) {
@@ -864,13 +878,21 @@ pub fn record_image_upload(handle_hash: String, width: u32, height: u32) {
     }
 }
 
-/// Get the current image rendering FPS 
+/// Get the current image rendering FPS
 /// This is a global function accessible to applications
 pub fn get_image_display_fps() -> f64 {
     if let Ok(tracker) = IMAGE_DISPLAY_TRACKER.lock() {
         return tracker.get_fps();
     }
     0.0
+}
+
+/// Reset the image display tracker for fresh measurements
+/// Call this when starting a new benchmark run to clear stale data
+pub fn reset_image_display_tracker() {
+    if let Ok(mut tracker) = IMAGE_DISPLAY_TRACKER.lock() {
+        tracker.reset();
+    }
 }
 
 /// Get the internal timestamps from the image tracker
