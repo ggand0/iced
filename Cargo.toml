@@ -190,7 +190,10 @@ window_clipboard = "0.4.1"
 ##winit = { git = "https://github.com/ggand0/winit.git", rev = "4118fd4396cf3cf29655668e9197fa657c598805" } # 0.30.0-15
 
 # v0.30.1 partial fix + _CGSSetWindowBackgroundBlurRadius fix
-winit = { git = "https://github.com/ggand0/winit.git", rev = "47974007b84eb488a20d0a2eca5a2aa9b5ee66b2" }
+##winit = { git = "https://github.com/ggand0/winit.git", rev = "47974007b84eb488a20d0a2eca5a2aa9b5ee66b2" }
+
+# v0.30.1 + X11 DnD position fix
+winit = { git = "https://github.com/ggand0/winit.git", rev = "7dea6466a4b5e174932c493ec65919afb2b9d036" }
 
 rayon = "1.8"
 texpresso = { version = "2.0.1", features = ["rayon"] }
